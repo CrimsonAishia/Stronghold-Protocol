@@ -3,6 +3,7 @@
 // A URL already stored by a local import (assetPack.js) is marked done and not requested again.
 import { mediaUrl } from './media.js';
 import { listImportedPaths } from './assetCache.js';
+import { cdnAssetPath } from './assetCdn.js';
 
 /**
  * Collect only same-origin art files, including all Spine pages and optional local scenes.
@@ -15,14 +16,16 @@ export function collectAssetUrls(...manifests) {
   const urls = new Set();
   const visit = (value) => {
     if (typeof value === 'string') {
-      if (/^\/(?:assets|fonts)\/[^/]/.test(value) && !/[?#\\]/.test(value)) urls.add(mediaUrl(value));
+      const path = cdnAssetPath(value);
+      if (path && /^\/(?:assets|fonts)\//.test(path)) urls.add(mediaUrl(value));
     } else if (value && typeof value === 'object') {
       for (const child of Object.values(value)) visit(child);
     }
   };
   manifests.forEach(visit);
   // Fetch models/images before audio, so an interrupted download still improves battle visuals.
-  return [...urls].sort((a, b) => Number(a.startsWith('/media/')) - Number(b.startsWith('/media/')) || a.localeCompare(b));
+  const audio = (url) => /^\/(?:media\/|assets\/(?:~[0-9a-f]{16}\/)?audio\/)/.test(cdnAssetPath(url) || '');
+  return [...urls].sort((a, b) => Number(audio(a)) - Number(audio(b)) || a.localeCompare(b));
 }
 
 /** A bounded, pausable download queue. A file counts only after its entire body arrives. */

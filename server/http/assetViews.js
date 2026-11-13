@@ -21,6 +21,7 @@ import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { hashedPath } from '../../shared/assetPaths.js';
 import { hash16 } from './assetIndex.js';
+import { cdnManifest } from './assetCdn.js';
 import { noopLog } from './config.js';
 import { mergeLocalChars } from '../plugins/artReferences.js';
 export { mergeLocalChars } from '../plugins/artReferences.js';
@@ -126,7 +127,7 @@ export function rewriteManifest(doc, name, index) {
  * The views of one server.
  * @param {{ dataDir: string, index?: ReturnType<typeof import('./assetIndex.js').createAssetIndex> | null, log?: object }} opts
  */
-export function createManifestViews({ dataDir, index, log = noopLog }) {
+export function createManifestViews({ dataDir, index, log = noopLog, assetCdn = '' }) {
   const dir = path.resolve(dataDir);
   /** @type {Map<string, { key: string, view: { body: Buffer, hash: string, hashed: number, plain: number } | null, models: string[][] }>} */
   const cache = new Map();
@@ -143,7 +144,7 @@ export function createManifestViews({ dataDir, index, log = noopLog }) {
     const localFile = path.join(dir, 'local-assets.json');
     const localStat = name === 'assets.json' ? await fsp.stat(localFile).catch(() => null) : null;
     const indexed = index?.ready && index.size > 0;
-    if (!indexed && !localStat) return null;
+    if (!indexed && !localStat && !assetCdn) return null;
     const file = path.join(dir, name);
     const st = await fsp.stat(file).catch(() => null);
     if (!st || !st.isFile()) {
@@ -166,12 +167,12 @@ export function createManifestViews({ dataDir, index, log = noopLog }) {
       let local;
       try { local = JSON.parse(await fsp.readFile(localFile, 'utf8')); } catch { /* optional local art */ }
       const merged = mergeLocalChars(doc, local);
-      if (!indexed && merged === doc) return null;
+      if (!indexed && merged === doc && !assetCdn) return null;
       doc = merged;
     }
     // one synchronous step: the view and the model lists the index checks a model's URLs against
     const { doc: out, models, hashed, plain } = rewriteManifest(doc, name, indexed ? index : plainIndex);
-    const body = Buffer.from(JSON.stringify(out));
+    const body = Buffer.from(JSON.stringify(cdnManifest(out, assetCdn)));
     const view = { body, hash: hash16(body), hashed, plain };
     cache.set(name, { key, view, models });
     pushModels();

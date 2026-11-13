@@ -9,6 +9,8 @@
 // matched. A Range request is left to the network so audio seeking still reaches the server. What an import stored is
 // also listed in one index entry of the cache (IMPORTED_INDEX_URL): Chrome cannot list a cache that large.
 
+import { assetCdnOrigin } from './assetCdn.js';
+
 /** Cache Storage name. Bump the suffix to drop previously imported bytes on the next activation. */
 export const IMPORTED_ASSET_CACHE = 'sp-imported-assets-v1';
 
@@ -36,7 +38,7 @@ export function shouldServeImportedAsset(request, pageOrigin) {
   if (!raw || !pageOrigin) return false;
   let url;
   try { url = new URL(raw, pageOrigin); } catch { return false; }
-  if (url.origin !== pageOrigin) return false;
+  if (url.origin !== pageOrigin && url.origin !== assetCdnOrigin()) return false;
   return IMPORTED_ASSET_PATH.test(url.pathname);
 }
 

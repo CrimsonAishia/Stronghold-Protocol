@@ -17,6 +17,7 @@
 
 import { splitHashedPath } from '../../shared/assetPaths.js';
 import { mediaUrl } from './media.js';
+import { cdnAssetPath } from './assetCdn.js';
 import { IMPORTED_ASSET_CACHE, addImportedPaths, putImportedAsset, pruneImportedPaths } from './assetCache.js';
 
 export const MAX_ZIP_ENTRIES = 500_000;
@@ -361,7 +362,9 @@ export async function modelHashOf(parts) {
  */
 export function plainRel(url) {
   if (typeof url !== 'string' || /[?#\\]/.test(url) || url.includes('\0')) return null;
-  const split = splitHashedPath(url);
+  const canonical = cdnAssetPath(url);
+  if (!canonical) return null;
+  const split = splitHashedPath(canonical);
   if (!split.hash) return null;
   let path;
   try { path = decodeURIComponent(split.path); } catch { return null; }
@@ -377,7 +380,7 @@ function isObj(value) {
 }
 
 function isSpine(value) {
-  return isObj(value) && typeof value.skel === 'string' && value.skel.startsWith('/') && /\.skel$/.test(value.skel);
+  return isObj(value) && typeof value.skel === 'string' && !!cdnAssetPath(value.skel) && /\.skel$/.test(value.skel);
 }
 
 /** Skeleton, atlas, then pages. No pages listed → the default `<skel>.png` under the same hash, as the server does. */
@@ -552,11 +555,13 @@ export async function pruneImportedAssets({ fetch: doFetch = (...args) => global
 
 /** The cache keys of one served URL: itself, plus the `/media/~hash/…` alias when playback would request it. */
 export function cacheUrlsFor(url) {
-  const out = [];
-  if (typeof url === 'string' && url) out.push(url);
-  const media = mediaUrl(url);
-  if (typeof media === 'string' && media && media !== url) out.push(media);
-  return out;
+  const out = new Set();
+  if (typeof url === 'string' && url) out.add(url);
+  const canonical = cdnAssetPath(url);
+  if (canonical) out.add(canonical);
+  const media = mediaUrl(canonical || url);
+  if (typeof media === 'string' && media) out.add(media);
+  return [...out];
 }
 
 const idleState = () => ({

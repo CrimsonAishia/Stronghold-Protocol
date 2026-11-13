@@ -69,7 +69,8 @@ import { splitHashedPath } from '../../shared/assetPaths.js';
 import { ROOT, noopLog } from './config.js';
 import { sendError, sendJson } from './common.js';
 import { MIME, CompressCache, IMMUTABLE_CACHE, isNotModified, serveFile, serveBuffer } from './files.js';
-import { ASSET_INDEX_ROOTS, hashedFileOpts } from './assetIndex.js';
+import { ASSET_INDEX_ROOTS, hashedFileOpts, hash16 } from './assetIndex.js';
+import { CDN_ASSET_PATH, cdnBootstrap, cdnHtml } from './assetCdn.js';
 import { serveMedia } from './media.js';
 import { createPluginRegistry, sameIdentity, statIdentity } from '../plugins/registry.js';
 import { computeVanillaContent } from '../plugins/identity.js';
@@ -132,7 +133,7 @@ const CS_FILE = /^\/cs\/([0-9a-f]{16})\/([A-Za-z0-9._\/-]{1,200})$/;
  */
 export function createStaticHandler({ publicDir, dataDir, sharedDir, simDir = path.join(ROOT, 'server', 'sim'), packsDir = path.join(ROOT, 'packs'),
   pluginsDir = path.join(path.dirname(path.resolve(packsDir)), 'plugins'), packs = null, content = null, log = noopLog,
-  assetIndex = null, views = null, visual = null, contents = null, versions = null }) {
+  assetIndex = null, views = null, visual = null, contents = null, versions = null, assetCdn = '' }) {
   const registry = packs || createPluginRegistry({ publicDir, dataDir, packsDir, pluginsDir }, { log: /** @type {any} */ (log) });
   const sets = visual || (typeof registry.pluginFile === 'function' ? createVisualSets({ registry, log }) : null);
   let vanilla = content;
@@ -169,6 +170,7 @@ export function createStaticHandler({ publicDir, dataDir, sharedDir, simDir = pa
   const shimBody = Buffer.from(DATA_SHIM_JS);
   const shimTag = `"shim-${shimBody.length.toString(16)}"`;
   const gzipCache = new CompressCache(); // brotli and gzip bodies (files.js)
+  const cdnConfig = Buffer.from(cdnBootstrap(assetCdn));
 
   return async function serveStatic(req, res, rawPath, query) {
     let decoded;
@@ -176,6 +178,14 @@ export function createStaticHandler({ publicDir, dataDir, sharedDir, simDir = pa
     if (!decoded.startsWith('/') || decoded.includes('\0') || decoded.includes('\\')) {
       sendError(req, res, 400, '请求地址无效 · Bad request');
       return;
+    }
+    if (decoded === '/asset-cdn.js') {
+      await serveBuffer(req, res, { body: cdnConfig, hash: hash16(cdnConfig), type: MIME['.js'], cacheControl: 'no-cache', key: 'asset-cdn', cache: gzipCache });
+      return;
+    }
+    if (assetCdn && CDN_ASSET_PATH.test(decoded)) {
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Access-Control-Expose-Headers', 'Content-Length, Content-Range, Accept-Ranges, ETag');
     }
     // the plugin studio's page is never a static file (server/studio/index.js isStudioPath: any spelling of /studio/)
     if (isStudioPath(decoded)) { sendError(req, res, 404, '页面不存在 · Not found', decoded.length <= 200 ? decoded : ''); return; }
@@ -357,6 +367,11 @@ export function createStaticHandler({ publicDir, dataDir, sharedDir, simDir = pa
     }
     const indexed = mount.name === 'public' && segments.length > 1 && ASSET_INDEX_ROOTS.includes(segments[0]);
     const opts = indexed ? hashedFileOpts(assetIndex, segments.join('/'), stat, urlHash) : (urlHash ? { cacheControl: 'no-cache' } : {});
+    if (assetCdn && mount.name === 'public' && path.resolve(absPath) === path.resolve(publicDir, 'index.html')) {
+      const body = Buffer.from(cdnHtml(await fsp.readFile(absPath, 'utf8'), assetCdn));
+      await serveBuffer(req, res, { body, hash: hash16(body), type: MIME['.html'], cacheControl: 'no-cache', key: 'cdn-index', cache: gzipCache });
+      return;
+    }
     await serveFile(req, res, absPath, stat, mount.name, segments, query, gzipCache, log, opts);
   };
 }
