@@ -55,6 +55,9 @@ import { SettingsButton } from '../ui/settings.js';
 import { PwaInstallButton, detectFeatures, useMediaQuery, SHORT_SCREEN_QUERY } from '../ui/device.js';
 import { LoadoutButton } from './loadout.js';
 import { FriendsDrawerButton } from '../ui/friendsDrawer.js';
+import { socialStore } from '../social/store.js';
+import { canPlayOnline } from '../social/sessionName.js';
+import { refreshOnlineLogin } from '../social/onlineAccess.js';
 import { net, identity } from '../net.js';
 import { store, useStore, shallowEqual, loadPref, savePref } from '../store.js';
 import { data, getConfig, getMode, getStage, useData } from '../data.js';
@@ -215,12 +218,14 @@ export function rememberRoom(code, test = false) {
 }
 
 export async function joinKnown(type, key) {
+  await refreshOnlineLogin();
   try { return await net.request(type, { code: key }); } catch (err) {
     if (err?.code !== ERR.TEST_CONFIRM) throw err;
     const text = type === 'room.spectate'
       ? t('这是测试房间，不计入任何记录。确认观战？')
       : t('这是测试房间，不计入任何记录。确认加入？');
     if (await confirmDialog({ title: t('测试'), text })) {
+      await refreshOnlineLogin();
       return net.request(type, { code: key, testAck: true });
     }
   }
@@ -667,6 +672,8 @@ export function LobbyScreen() {
   const [soloFree, setSoloFree] = useState(() => loadPref('lobby.soloUnlimited', false) === true);
   // the open dialogs: 选择同盟方式 (同盟模拟 / 密钥加入) and 选择模拟协议 (独立模拟)
   const [allyOpen, setAllyOpen] = useState(false);
+  const loggedIn = useStore((s) => canPlayOnline(s.selfProfile), Object.is, socialStore);
+  useEffect(() => { if (!loggedIn) setAllyOpen(false); }, [loggedIn]);
   const [soloOpen, setSoloOpen] = useState(false);
   const [code, setCode] = useState('');
   const [asTest, setAsTest] = useState(false);
@@ -699,7 +706,10 @@ export function LobbyScreen() {
   const shownSolo = fallbackDifficulty(solo, difficulty);
   const shownCoop = fallbackDifficulty(coop, difficulty);
 
-  const openMode = (m) => { if (m === 'solo') setSoloOpen(true); else setAllyOpen(true); };
+  const openMode = async (m) => {
+    if (m === 'solo') { setSoloOpen(true); return; }
+    try { await refreshOnlineLogin(); setAllyOpen(true); } catch (err) { toastError(err); }
+  };
   const pickDifficulty = (d) => { setDifficulty(d); savePref('lobby.difficulty', d); };
   const setSoloFreePref = (on) => { const next = on === true; setSoloFree(next); savePref('lobby.soloUnlimited', next); };
 
@@ -715,10 +725,13 @@ export function LobbyScreen() {
   };
   // 独立模拟: at the difficulty picked on 选择模拟协议; 创建同盟: at the remembered one, changed in the room by the host
   // (`version`: the lobby's, only when welcome.versions is present — protocol §4; omitted when the server offers 第二期下半 alone)
-  const create = (mode) => run('create', () => net.request('room.create', {
-    mode, difficulty: mode === 'solo' ? shownSolo : shownCoop, ...(testMode && asTest ? { test: true } : {}), ...(versions ? { version } : {}),
-    ...(mode === 'solo' && soloFree && soloTimed === true ? { soloUnlimited: true } : {}),
-  }));
+  const create = (mode) => run('create', async () => {
+    if (mode === 'coop') await refreshOnlineLogin();
+    return net.request('room.create', {
+      mode, difficulty: mode === 'solo' ? shownSolo : shownCoop, ...(testMode && asTest ? { test: true } : {}), ...(versions ? { version } : {}),
+      ...(mode === 'solo' && soloFree && soloTimed === true ? { soloUnlimited: true } : {}),
+    });
+  });
   const join = (c = code) => {
     // `onClick=${join}` hands the click EVENT as the first argument, and a default parameter only applies to
     // `undefined` — codeArg keeps an event target out of the key and falls back to the input field
@@ -776,7 +789,7 @@ export function LobbyScreen() {
       <${HubTitle} />
       <aside class="hub-side">
         <${AchievementCard} onOpen=${() => setAchOpen(true)} />
-        <${HubTile} icon="key" label=${t('密钥加入')} en="JOIN WITH KEY" class="hub-tile--key" onClick=${() => setAllyOpen(true)} />
+        <${HubTile} icon="key" label=${t('密钥加入')} en="JOIN WITH KEY" class="hub-tile--key" onClick=${() => openMode('coop')} />
         <${TipsPanel} />
       </aside>
       <aside class="hub-right">
@@ -795,7 +808,7 @@ export function LobbyScreen() {
     </main>
 
     ${allyOpen ? html`<${AllianceSelect} onClose=${() => setAllyOpen(false)} onCreate=${() => create('coop')} difficulty=${shownCoop}
-      code=${code} onCode=${(v) => setCode(normalizeCode(v))} codeOk=${codeOk} online=${online} busy=${busy}
+      code=${code} onCode=${(v) => setCode(normalizeCode(v))} codeOk=${codeOk} online=${online && loggedIn} busy=${busy}
       onJoin=${join} onSpectate=${spectate} recent=${recent} marks=${marks} focusKey=${!coarse}
       testMode=${testMode} asTest=${asTest} onTest=${setAsTest} short=${shortScreen} />` : null}
     ${soloOpen ? html`<${ProtocolSelect} roomMode="solo" difficulty=${shownSolo} onDifficulty=${pickDifficulty}

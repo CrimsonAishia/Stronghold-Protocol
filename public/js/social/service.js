@@ -3,6 +3,7 @@
 // Follows Stronghold Protocol rules:
 // - Single in-flight request guard to avoid pileup on slow host responses.
 // - 5s polling when friends drawer is open, pauses when drawer is closed or page is hidden.
+// - With the drawer closed, poll only the host profile while visible to notice login/logout.
 // - Invalidates older requests on account change.
 // - Distinguishes empty array (clear list) from errors (preserve stale list + mark isStale).
 
@@ -25,6 +26,7 @@ export function createSocialService({
 } = {}) {
   let disposed = false;
   let inFlight = false;
+  let selfRequest = null;
   let pollTimer = null;
   let currentUid = null;
 
@@ -39,11 +41,12 @@ export function createSocialService({
     stopPolling();
     if (disposed) return;
     const s = store.get();
-    if (!s.drawerOpen) return;
+    if (!s.drawerOpen && !s.hostAvailable) return;
     if (doc && doc.visibilityState === 'hidden') return;
 
     pollTimer = setTimeoutFn(() => {
-      void refreshFriends({ background: true }).then(() => {
+      const refresh = store.get().drawerOpen ? refreshFriends({ background: true }) : refreshSelf();
+      void refresh.then(() => {
         scheduleNextPoll();
       });
     }, pollIntervalMs);
@@ -59,6 +62,7 @@ export function createSocialService({
       currentUid = newUid;
       store.set({
         selfProfile: newProfile,
+        profileChecked: true,
         friends: [],
         error: null,
         isStale: false,
@@ -68,20 +72,28 @@ export function createSocialService({
     }
 
     currentUid = newUid;
-    store.patch('selfProfile', newProfile || null);
+    store.set({ selfProfile: newProfile || null, profileChecked: true });
     return false;
   }
 
-  async function refreshSelf() {
+  function refreshSelf() {
+    if (!selfRequest) selfRequest = readSelf().finally(() => { selfRequest = null; });
+    return selfRequest;
+  }
+
+  async function readSelf() {
     if (disposed || !bridge) return null;
     try {
       const res = await bridge.getSelfProfile();
+      if (disposed) return null;
       if (res.ok && res.data) {
         await checkAccountChange(res.data);
         return res.data;
       }
     } catch (err) {
       console.warn('[social] refreshSelf failed', err);
+    } finally {
+      if (!disposed) store.set({ profileChecked: true });
     }
     return null;
   }
@@ -95,15 +107,8 @@ export function createSocialService({
 
     try {
       // Re-verify self profile before fetching friends
-      const selfRes = await bridge.getSelfProfile();
-      let selfProfile = store.get().selfProfile;
-      if (selfRes.ok && selfRes.data) {
-        const changed = await checkAccountChange(selfRes.data);
-        selfProfile = selfRes.data;
-        if (changed) {
-          // Account just changed, restart fetch
-        }
-      }
+      await refreshSelf();
+      const selfProfile = store.get().selfProfile;
 
       const res = await bridge.getFriends();
       if (disposed) return;
@@ -146,7 +151,7 @@ export function createSocialService({
 
   function closeDrawer() {
     store.set({ drawerOpen: false });
-    stopPolling();
+    scheduleNextPoll();
   }
 
   function toggleDrawer() {
@@ -168,8 +173,8 @@ export function createSocialService({
     if (doc.visibilityState === 'visible') {
       if (store.get().drawerOpen) {
         void refreshFriends();
-        scheduleNextPoll();
-      }
+      } else void refreshSelf();
+      scheduleNextPoll();
     } else {
       stopPolling();
     }
@@ -188,7 +193,8 @@ export function createSocialService({
     });
     if (available) {
       void refreshSelf();
-    }
+    } else store.set({ selfProfile: null, profileChecked: true });
+    scheduleNextPoll();
   }
 
   // Subscribe to late host ready events

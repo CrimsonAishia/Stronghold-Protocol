@@ -105,6 +105,10 @@ export class Session {
     this.token = token;
     /** @type {string} sanitized nickname */
     this.name = name;
+    /** @type {string | null} server-assigned guest name, retained across reconnects and host account changes */
+    this.guestName = null;
+    /** @type {boolean} host-reported login state; not a cryptographically verified account identity */
+    this.bakaboxLoggedIn = false;
     /** @type {import('ws').WebSocket | null} currently bound socket */
     this.ws = null;
     /** @type {boolean} */
@@ -162,6 +166,7 @@ export class SessionRegistry {
     this.maxSessions = maxSessions;
     this.now = now;
     /** @type {Map<string, Session>} */ this.byPlayerId = new Map();
+    this.guestSequence = 0;
     /** @type {Map<string, Session>} */ this.byTokenMap = new Map();
   }
 
@@ -744,7 +749,13 @@ export class Network {
       session.claimAt = Number.isFinite(msg.claimAt) ? msg.claimAt : null;
       session.disconnectedAt = null;
     }
-    session.name = name;
+    let displayName = name;
+    if (msg.guest === true) {
+      session.guestName ??= `游客#${++this.registry.guestSequence}`; // i18n-ignore (player name)
+      displayName = session.guestName;
+    }
+    session.name = displayName;
+    session.bakaboxLoggedIn = msg.bakaboxLoggedIn === true && msg.guest !== true;
     session.lastSeen = now;
     session.addr = conn.ip;
     session.limitKey = conn.key;

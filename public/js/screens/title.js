@@ -1,18 +1,15 @@
-// Title screen: season-style backdrop, big title 卫戍协议：盟约, remembered nickname, 开始, the language menu
+// Title screen: season-style backdrop, big title 卫戍协议：盟约, automatic identity, 开始, the language menu
 // (中文 | English | every pack in public/i18n/, ui/lang.js; a title in an alphabetic script — English — is the big one and
 // the small wordmark above it hides).
 //
-// Pressing 开始 validates the nickname (1..NAME_MAX_LEN chars, no control characters), stores it,
-// marks this tab as "entered" (so reloads skip the title) and hands the name to net.js, which
-// sends `hello` (now, or as soon as the socket is open). The router then shows the lobby.
+// Pressing 开始 marks this tab as entered. social/sessionName.js uses the host profile or asks
+// the server for a numbered guest name; the router then shows the lobby.
 //
 // Backdrop art: if data/assets.json lists a UI backdrop (`ui.titleBackdrop`, or one of the
 // entry/loading illustration names) it is layered under the CSS art; otherwise the screen is
 // pure CSS/SVG (radar, ridgelines, glow), so it never issues a request that can 404.
 //
-// The full art, under the login box: 下载完整素材 (ui/assetDownload.js — its dialog downloads from this server) and
-// 导入素材包 (ui/assetImport.js — the player's own folder or zip, no server download) side by side, so an import never
-// opens the download (docs/history/0.3.0.md §32.14.39).
+// Optional maintenance tools (?asset-tools=1): explicit full download and local import. Normal play loads art on demand.
 //
 // Plugins (DESIGN §32 P1a, the design study's §7.4): when the server has unofficial plugins (content.plugins of /healthz or
 // welcome — content.js installedCount), the footer says 「本服务器安装了 N 个插件」 — a button that loads the list
@@ -22,16 +19,15 @@
 import { ResumeMatchButton } from '../ui/resumeMatch.js';
 import { AssetDownloadButton } from '../ui/assetDownload.js';
 import { AssetImportButton } from '../ui/assetImport.js';
-import { useEffect, useMemo, useState } from '../../vendor/hooks.module.js';
-import { NAME_MAX_LEN, APP_VERSION, DEV_BUILD } from '../../../shared/constants.js';
-import { html, Button, Icon, MicroLabel, TextField, PingPill } from '../ui/components.js';
+import { useMemo, useState } from '../../vendor/hooks.module.js';
+import { APP_VERSION, DEV_BUILD } from '../../../shared/constants.js';
+import { html, Button, Icon, MicroLabel, PingPill } from '../ui/components.js';
 import { GuideButton } from '../ui/guide.js';
 import { openStats } from './stats.js';
-import { toast } from '../ui/toasts.js';
-import { net, identity } from '../net.js';
+import { identity } from '../net.js';
 import { store, useStore, shallowEqual } from '../store.js';
 import { data, useData } from '../data.js';
-import { FullscreenButton, PwaInstallButton, detectFeatures } from '../ui/device.js';
+import { FullscreenButton, PwaInstallButton } from '../ui/device.js';
 import { LangToggle, useLang } from '../ui/lang.js';
 import { t, N_ } from '../../../shared/i18n.js';
 import { scriptOf } from '../../../shared/i18nPacks.js';
@@ -40,22 +36,17 @@ import { SettingsModal } from '../ui/settings.js';
 import { installedCount } from '../content.js';
 import { NoticesButton } from '../ui/notices.js';
 import { FriendsDrawerButton } from '../ui/friendsDrawer.js';
-import { sanitizeName, isValidName } from '../ui/playerName.js';
+import { socialStore } from '../social/store.js';
+import { profileName, canPlayOnline } from '../social/sessionName.js';
 
 export { stripLoneSurrogates, sanitizeName, isValidName } from '../ui/playerName.js';
 
 /**
- * Enter the game shell with a nickname (title → lobby).
- * @param {string} rawName
- * @returns {boolean} false when the name is invalid
+ * Enter the game shell with an automatically selected host or guest identity (title → lobby).
  */
-export function enterSession(rawName) {
-  const name = sanitizeName(rawName);
-  if (!name) return false;
-  identity.saveName(name);
+export function enterSession() {
   identity.setEntered(true);
-  store.set((s) => ({ me: { ...s.me, name }, session: { ...s.session, entered: true } }));
-  net.setName(name);
+  store.patch('session', { entered: true });
   return true;
 }
 
@@ -166,12 +157,9 @@ export function TitleScreen() {
   const conn = useStore((s) => s.connection, shallowEqual);
   const pendingJoin = useStore((s) => s.ui.pendingJoin);
   useLang(); // re-render on a language switch
-  const currentName = useStore((s) => s.me.name);
-  const [name, setName] = useState(() => currentName || identity.loadName() || '');
-  // An import may restore the current name while this screen remains behind the stats overlay.
-  useEffect(() => {
-    if (currentName) setName((draft) => draft || currentName);
-  }, [currentName]);
+  const profile = useStore((s) => s.selfProfile, Object.is, socialStore);
+  const name = profileName(profile);
+  const showAssetTools = new URLSearchParams(globalThis.location?.search || '').get('asset-tools') === '1';
   const [settingsOpen, setSettingsOpen] = useState(false);
   // the list of the server's plugins once loaded (ui/pluginPanel.js — a component in state: set through an updater)
   const [Installed, setInstalled] = useState(null);
@@ -193,17 +181,11 @@ export function TitleScreen() {
   // CSS ridgelines only when there is no ridge art (avoids a swap flash when the art arrives).
   const cssRidges = assetsSettled && (!ridges || ridgesFailed);
 
-  const valid = isValidName(name);
-  const start = () => {
-    if (!valid) { toast(t('请输入博士代号'), 'warn'); return; }
-    enterSession(name);
-  };
+  const start = () => enterSession();
 
   const online = conn.status === 'online' || conn.status === 'connected';
   const dotClass = online ? 'is-on' : conn.status === 'reconnecting' || conn.status === 'connecting' || conn.status === 'handshaking' ? 'is-warn' : 'is-bad';
 
-  // touch screens: no autofocus (it would pop the on-screen keyboard over a landscape phone's whole view)
-  const touchUi = useMemo(() => detectFeatures().coarse, []);
   // a title in an alphabetic script (English, French …) is the big one in the display face and the wordmark above it
   // hides; a CJK / kana / Hangul title keeps the Chinese layout (shared/i18nPacks.js scriptOf — a pack needs no flag)
   const alphabetic = scriptOf(t('卫戍协议')) === 'alphabetic';
@@ -253,12 +235,10 @@ export function TitleScreen() {
       <div class="title-login">
         ${pendingJoin ? html`<div class="title-invite">
           <${Icon} name="key" />
-          <span>${t('收到同盟邀请')}</span><b class="num">${pendingJoin}</b><span class="t-lo">${t('· 输入代号后将自动加入')}</span>
+          <span>${t('收到同盟邀请')}</span><b class="num">${pendingJoin}</b><span class="t-lo">${canPlayOnline(profile) ? t('· 点击开始后将自动加入') : t('请先登录 BakaBox 后再使用联机功能')}</span>
         </div>` : null}
-        <${TextField} label=${t('博士代号')} micro="CALLSIGN" size="lg" icon="user" value=${name} maxLength=${NAME_MAX_LEN}
-          placeholder=${t('输入你的代号（最多 {NAME_MAX_LEN} 字）', { NAME_MAX_LEN })} autoFocus=${!touchUi}
-          onInput=${setName} onEnter=${start} />
-        <${Button} variant="primary" size="xl" block=${true} iconRight="chevrons" disabled=${!valid} onClick=${start}>${t('开始')}<//>
+        <p class="title-identity"><${Icon} name="user" />${name || t('游客')}</p>
+        <${Button} variant="primary" size="xl" block=${true} iconRight="chevrons" onClick=${start}>${t('开始')}<//>
         <div class="title-conn">
           <span class=${`status-dot ${dotClass}`}></span>
           <span>${STATUS_TEXT[conn.status] ? t(STATUS_TEXT[conn.status]) : conn.status}</span>
@@ -269,10 +249,10 @@ export function TitleScreen() {
           <${FullscreenButton} class="title-fs" />
         </div>
       </div>
-      <div class="title-assets">
+      ${showAssetTools ? html`<div class="title-assets">
         <${AssetDownloadButton} />
         <${AssetImportButton} />
-      </div>
+      </div>` : null}
     </main>
 
     <${SettingsModal} open=${settingsOpen} onClose=${() => setSettingsOpen(false)} />

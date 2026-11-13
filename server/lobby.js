@@ -706,6 +706,11 @@ export class Lobby {
   onHello(session, { resumed, repeat }) {
     if (!resumed && !repeat) return;
     const room = this.roomOf(session);
+    if (room?.mode === 'coop' && session.bakaboxLoggedIn !== true) {
+      this.removeMember(room, session.playerId);
+      sendSession(session, { t: 'room.closed', reason: 'login_required' });
+      return;
+    }
     if (!room) {
       if (session.notice) {
         sendSession(session, { t: 'room.closed', reason: session.notice });
@@ -805,6 +810,7 @@ export class Lobby {
    * @param {{ from?: { seat: Seat, gen: number } | null } | null} [ctx]
    */
   handleMessage(session, msg, ctx = null) {
+    if (this.roomOf(session)?.mode === 'coop' && session.bakaboxLoggedIn !== true && msg.t !== 'room.leave') return fail(ERR.LOGIN_REQUIRED);
     switch (msg.t) {
       case 'room.create': return this.create(session, msg);
       case 'room.join': return this.join(session, msg);
@@ -911,6 +917,7 @@ export class Lobby {
   // ---------------------------------------------------------------------------------------------------
 
   create(session, { mode, difficulty: asked, test, version: askedVersion, soloUnlimited } = {}) {
+    if (mode === 'coop' && session.bakaboxLoggedIn !== true) return fail(ERR.LOGIN_REQUIRED);
     // A test room exists only when the process switch allowed it. The check runs before the room is built.
     if (test === true && this.testEnabled !== true) return fail(ERR.TEST_DISABLED);
     // the official version (header "Official versions"): left out, the server's default
@@ -986,6 +993,7 @@ export class Lobby {
   }
 
   join(session, { code, testAck }) {
+    if (session.bakaboxLoggedIn !== true) return fail(ERR.LOGIN_REQUIRED);
     const norm = String(code).trim().toUpperCase();
     const room = norm.length === ROOM_CODE_LEN ? this.rooms.get(norm) : undefined;
     if (!room) return fail(ERR.ROOM_NOT_FOUND);
@@ -1023,6 +1031,7 @@ export class Lobby {
    * running match the match registers the spectator and resends what it may see (Match.addSpectator).
    */
   spectate(session, { code, testAck }) {
+    if (session.bakaboxLoggedIn !== true) return fail(ERR.LOGIN_REQUIRED);
     const norm = String(code).trim().toUpperCase();
     const room = norm.length === ROOM_CODE_LEN ? this.rooms.get(norm) : undefined;
     if (!room) return fail(ERR.ROOM_NOT_FOUND);
@@ -2221,6 +2230,7 @@ export class Lobby {
   routeGameNow(session, msg) {
     const room = this.roomOf(session);
     if (!room) return fail(ERR.NOT_IN_ROOM);
+    if (room.mode === 'coop' && session.bakaboxLoggedIn !== true && msg.t !== 'g.leave') return fail(ERR.LOGIN_REQUIRED);
     if (msg.t === 'g.test') {
       if (!this.testEnabled) return fail(ERR.TEST_DISABLED);
       if (room.test !== true) return fail(ERR.TEST_FORBIDDEN);

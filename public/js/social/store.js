@@ -13,6 +13,7 @@ export const INITIAL_SOCIAL_STATE = Object.freeze({
     progress: false,
   },
   selfProfile: null,
+  profileChecked: false,
   friends: [],
   loading: false,
   error: null,

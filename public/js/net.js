@@ -140,6 +140,12 @@ export class Net {
     this.status = 'idle';
     this.ws = null;
     this.name = null;          // desired player name (hello is sent when set)
+    this.guest = false;        // ask the server for a stable numbered guest name
+    this.helloGuest = false;
+    this._helloSentGuest = false;
+    this.loggedIn = false;
+    this.helloLoggedIn = false;
+    this._helloSentLoggedIn = false;
     this.helloName = null;     // name we sent in the hello that got the last welcome
     this.serverName = null;    // name as normalised by the server
     this.playerId = null;
@@ -282,18 +288,21 @@ export class Net {
    * accepts a repeated hello on a live socket: it renames the session and resyncs room/match
    * state), otherwise as soon as it opens. No-op when that name is already accepted.
    * @param {string} name
+   * @param {{guest?: boolean, loggedIn?: boolean}} [options]
    */
-  setName(name) {
+  setName(name, { guest = false, loggedIn = false } = {}) {
     const n = typeof name === 'string' ? name.trim() : '';
     if (!n) return;
-    const changed = n !== this.name;
+    const changed = n !== this.name || guest !== this.guest || loggedIn !== this.loggedIn;
     this.name = n;
+    this.guest = guest;
+    this.loggedIn = loggedIn;
     if (!this.ws || this.ws.readyState !== WS_OPEN) {
       if (!this.ws && !this._reconnectTimer && !this._manualClose) this.connect();
       return; // hello goes out on open
     }
-    if (this.status === 'online' && this.helloName === n) return;
-    if (this.status === 'handshaking' && !changed && this._helloSentName === n) return;
+    if (this.status === 'online' && this.helloName === n && this.helloGuest === guest && this.helloLoggedIn === loggedIn) return;
+    if (this.status === 'handshaking' && !changed && this._helloSentName === n && this._helloSentGuest === guest && this._helloSentLoggedIn === loggedIn) return;
     // The server accepts a repeated hello on a live socket (it renames the session and resyncs).
     this._sendHello();
   }
@@ -383,6 +392,8 @@ export class Net {
     // `delta` says this build decodes `m.state` frames (shared/stateDelta.js). A server that does not speak it ignores
     // the field, and the client then keeps receiving the plain m.public / m.private frames it always got.
     const msg = { t: 'hello', rid, name: this.name, version: PROTOCOL_VERSION, delta: STATE_DELTA_VERSION };
+    if (this.guest) msg.guest = true;
+    if (this.loggedIn) msg.bakaboxLoggedIn = true;
     let token = null;
     try { token = this.getToken(); } catch { token = null; }
     if (typeof token === 'string' && token.length > 0 && token.length <= 64) {
@@ -394,6 +405,8 @@ export class Net {
     this._helloToken = token;
     this._helloRid = rid;
     this._helloSentName = this.name;
+    this._helloSentGuest = this.guest;
+    this._helloSentLoggedIn = this.loggedIn;
     if (this.status !== 'handshaking') this._setStatus('handshaking');
     if (!this._sendRaw(msg)) return;
     this._clearTimer('_helloTimer', 'clearTimeout');
@@ -414,6 +427,8 @@ export class Net {
     this._helloRid = null;
     // Compare future setName() calls against what we sent (the server may normalise the name).
     this.helloName = this._helloSentName;
+    this.helloGuest = this._helloSentGuest;
+    this.helloLoggedIn = this._helloSentLoggedIn;
     this.serverName = typeof msg.name === 'string' && msg.name ? msg.name : this._helloSentName;
     this.playerId = msg.playerId ?? null;
     this.attempt = 0;

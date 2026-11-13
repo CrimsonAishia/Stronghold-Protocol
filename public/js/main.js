@@ -48,7 +48,7 @@ import { net, identity, NetError } from './net.js';
 import { store, useStore, emptyMatch, selectRoute, sessionResetNotice, isSpectating } from './store.js';
 import { data } from './data.js';
 import { GAME_FILES } from './ui/gameComponents.js';
-import { TitleScreen, sanitizeName } from './screens/title.js';
+import { TitleScreen } from './screens/title.js';
 import { LobbyScreen, rememberRoom, parseRoomParam, joinKnown } from './screens/lobby.js';
 import { RoomScreen, TrustedNotice } from './screens/room.js';
 import { GameScreen } from './screens/game.js';
@@ -76,6 +76,7 @@ import { sanitizeVersions, roomVersion, isDefaultVersion, matchFrameVersion } fr
 import { createBakaboxBridge } from './integrations/bakaboxBridge.js';
 import { createSocialService, getSocialService } from './social/service.js';
 import { socialStore, setRoomShare } from './social/store.js';
+import { installSessionName } from './social/sessionName.js';
 import { installPresence } from './social/presence.js';
 import { FriendsDrawer } from './ui/friendsDrawer.js';
 
@@ -240,6 +241,7 @@ function onRoomState(msg) {
 }
 
 const CLOSE_REASON = {
+  login_required: N_('请先登录 BakaBox 后再使用联机功能'),
   // 'timeout' = this player was removed after staying disconnected past the lobby grace (server/lobby.js)
   host_left: N_('创建者已离开，同盟已解散'), timeout: N_('由于长时间断开连接，你已离开同盟'), empty: N_('同盟已解散'),
   kicked: N_('你已被移出同盟'), ended: N_('模拟已结束'), expired: N_('同盟已过期'), shutdown: N_('服务器维护中，同盟已关闭'),
@@ -460,10 +462,9 @@ async function boot() {
   const identityReady = identity.init();
 
   const pendingJoin = parseRoomParam(location.search);
-  const savedName = sanitizeName(identity.loadName());
-  const entered = identity.wasEntered() && !!savedName;
+  const entered = identity.wasEntered();
   store.set((s) => ({
-    me: { ...s.me, name: savedName },
+    me: { ...s.me, name: '' },
     session: { entered },
     ui: { ...s.ui, pendingJoin },
   }));
@@ -506,8 +507,7 @@ async function boot() {
   data.load('local').catch(() => {});
 
   const connectWhenReady = identityReady.then(() => {
-    if (entered) net.setName(savedName);
-    else net.connect();
+    net.connect();
   });
   // the language (and its UI translations) before the first render: no Chinese flash for an English player
   const langReady = initLang().catch((err) => console.warn('[app] language setup failed', err));
@@ -515,6 +515,7 @@ async function boot() {
   // BakaBox integration: non-blocking startup
   const bridge = createBakaboxBridge();
   createSocialService({ bridge });
+  installSessionName({ net, store, socialStore });
   installPresence({
     bridge,
     store,
