@@ -52,7 +52,7 @@ import { AchievementDialog, useStatsOpen } from './stats.js';
 import { SweepReport } from './sweep.js';
 import { Emblem } from './title.js';
 import { SettingsButton } from '../ui/settings.js';
-import { PwaInstallButton, detectFeatures, useMediaQuery, SHORT_SCREEN_QUERY } from '../ui/device.js';
+import { detectFeatures, useMediaQuery, SHORT_SCREEN_QUERY } from '../ui/device.js';
 import { LoadoutButton } from './loadout.js';
 import { FriendsDrawerButton } from '../ui/friendsDrawer.js';
 import { socialStore } from '../social/store.js';
@@ -776,7 +776,6 @@ export function LobbyScreen() {
           <${SettingsButton} class="lobby-settings" variant="secondary" square=${true} />
           <${GuideButton} class="lobby-guide" variant="secondary" square=${true} />
           <${LobbyMediaButton} />
-          <${PwaInstallButton} class="lobby-pwa" square=${true} />
         </div>
       </div>
       <div class="topbar__right">
