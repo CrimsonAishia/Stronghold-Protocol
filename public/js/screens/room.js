@@ -60,6 +60,8 @@ import { GuideButton } from '../ui/guide.js';
 import { openStats } from './stats.js';
 import { SettingsButton } from '../ui/settings.js';
 import { LoadoutButton } from './loadout.js';
+import { FriendsDrawerButton } from '../ui/friendsDrawer.js';
+import { socialStore, toggleRoomShare } from '../social/store.js';
 import { PluginTag, VersionTag, isModdedRoom } from '../ui/pluginTag.js';
 import { VersionVote, versionVoteOf } from '../ui/versionVote.js';
 import { VersionPicker } from '../ui/versionPicker.js';
@@ -497,6 +499,8 @@ export function RoomScreen() {
   const versions = useStore((s) => s.versions);
   const myLobby = useStore(lobbyVersion);
   const serverDefault = useStore(serverDefaultVersion);
+  const hostAvailable = useStore((s) => s.hostAvailable, Object.is, socialStore);
+  const shareEnabled = useStore((s) => s.roomShareEnabled, Object.is, socialStore);
   const [versionOpen, setVersionOpen] = useState(false);
   const seenVersion = useRef(room ? `${room.code}|${roomVersion(room)}` : '');
   useEffect(() => {
@@ -675,6 +679,7 @@ export function RoomScreen() {
           <span class="rs-clock__ping">${t('当前延迟')}<${PingPill} ms=${conn.ping} online=${online} /></span>
         </div>
         <div class="rs-tools">
+          <${FriendsDrawerButton} class="room-friends" />
           <${Button} variant="secondary" size="sm" square=${true} icon="chart" class="stats-entry" onClick=${openStats} title=${t('统计数据')} aria-label=${t('统计数据')} />
           <${SettingsButton} class="room-settings" variant="secondary" square=${true} />
           <${GuideButton} class="room-guide" variant="secondary" square=${true} />
@@ -688,6 +693,21 @@ export function RoomScreen() {
           <b class="rs-key__code num selectable" aria-label=${t('同盟密钥 {code}', { code: room.code })}>${room.code}</b>
           <button type="button" class="rs-key__copy" onClick=${() => copy('code')} title=${t('复制密钥')}>${t('复制')}</button>
           <button type="button" class="rs-key__link" onClick=${() => copy('link')} title=${t('复制链接')} aria-label=${t('复制链接')}><${Icon} name="link" /></button>
+          ${hostAvailable ? html`
+            <button
+              type="button"
+              class=${`rs-key__share${shareEnabled ? ' is-on' : ''}`}
+              onClick=${() => {
+                const next = toggleRoomShare();
+                toast(next ? t('已开启向好友分享房间') : t('已停止向好友分享房间'), 'info');
+              }}
+              title=${shareEnabled ? t('停止向好友分享房间') : t('向好友分享房间')}
+              aria-label=${t('向好友分享房间')}
+            >
+              <${Icon} name="users" />
+              <span>${shareEnabled ? t('已分享') : t('向好友分享')}</span>
+            </button>
+          ` : null}
         </div>` : html`<div class="rs-key rs-key--solo"><${MicroLabel}>SINGLE OPERATOR<//><span>${t('仅限 1 名博士')}</span></div>`}
       </div>
     </header>

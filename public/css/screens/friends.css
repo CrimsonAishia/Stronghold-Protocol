@@ -1,0 +1,341 @@
+/* ==========================================================================================
+   friends.css — Styles for BakaBox Friends Drawer (js/ui/friendsDrawer.js).
+   Follows Stronghold Protocol design system (css/theme.css, components.css).
+   ========================================================================================== */
+
+.friends-drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(8, 12, 10, 0.65);
+  backdrop-filter: blur(4px);
+  z-index: 900;
+  display: flex;
+  justify-content: flex-end;
+  animation: friends-fade-in var(--t-fast) var(--ease-out);
+}
+
+@keyframes friends-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.friends-drawer-panel {
+  position: relative;
+  width: min(4.8rem, 90vw);
+  height: 100%;
+  background: var(--bg-panel, #0f1412);
+  border-left: 1px solid var(--line-2, rgba(78, 216, 175, 0.2));
+  box-shadow: -8px 0 24px rgba(0, 0, 0, 0.6);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: friends-slide-in var(--t-med) var(--ease-out);
+}
+
+@keyframes friends-slide-in {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+.friends-drawer-header {
+  padding: 0.24rem 0.24rem 0.16rem;
+  border-bottom: 1px solid var(--line-1, rgba(255, 255, 255, 0.08));
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.16rem;
+}
+
+.friends-drawer-title-group {
+  display: flex;
+  align-items: center;
+  gap: 0.12rem;
+}
+
+.friends-drawer-title {
+  font-size: calc(0.24 * var(--t, 1rem));
+  font-weight: 900;
+  color: var(--text-hi, #f0f4f2);
+  letter-spacing: 0.08em;
+  margin: 0;
+}
+
+.friends-self-card {
+  margin: 0.16rem 0.24rem 0.12rem;
+  padding: 0.16rem;
+  background: rgba(26, 32, 29, 0.8);
+  border: 1px solid var(--line-2, rgba(78, 216, 175, 0.25));
+  display: flex;
+  align-items: center;
+  gap: 0.16rem;
+  position: relative;
+}
+
+.friends-avatar {
+  width: 0.52rem;
+  height: 0.52rem;
+  border-radius: 4px;
+  background: #18221e;
+  border: 1px solid var(--mint-700, #2a5a4a);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  flex-shrink: 0;
+  font-weight: 700;
+  font-size: 0.24rem;
+  color: var(--mint-400, #4ed8af);
+}
+
+.friends-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.friends-self-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.04rem;
+}
+
+.friends-self-name {
+  font-size: calc(0.18 * var(--t, 1rem));
+  font-weight: 700;
+  color: var(--text-hi, #f0f4f2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.friends-self-uid {
+  font-size: calc(0.13 * var(--t, 1rem));
+  color: var(--text-lo, #7d8e87);
+}
+
+.friends-controls {
+  padding: 0.12rem 0.24rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.12rem;
+}
+
+.friends-search-row {
+  display: flex;
+  position: relative;
+}
+
+.friends-search-input {
+  width: 100%;
+  height: 0.38rem;
+  background: #121815;
+  border: 1px solid var(--line-2, rgba(78, 216, 175, 0.25));
+  color: var(--text-hi, #f0f4f2);
+  padding: 0 0.16rem;
+  font-size: calc(0.15 * var(--t, 1rem));
+  outline: none;
+  transition: border-color var(--t-fast);
+}
+
+.friends-search-input:focus {
+  border-color: var(--mint-500, #4ed8af);
+}
+
+.friends-filter-tabs {
+  display: flex;
+  gap: 0.08rem;
+}
+
+.friends-tab-btn {
+  flex: 1;
+  height: 0.32rem;
+  font-size: calc(0.14 * var(--t, 1rem));
+  background: #161e1a;
+  border: 1px solid var(--line-1, rgba(255, 255, 255, 0.1));
+  color: var(--text-mid, #adc0b7);
+  cursor: pointer;
+  font-weight: 700;
+  transition: all var(--t-fast);
+}
+
+.friends-tab-btn.is-active {
+  background: var(--mint-900, #133329);
+  border-color: var(--mint-500, #4ed8af);
+  color: var(--mint-300, #8ff0d1);
+}
+
+.friends-stale-banner {
+  padding: 0.08rem 0.24rem;
+  background: rgba(216, 150, 40, 0.15);
+  border-top: 1px solid rgba(216, 150, 40, 0.4);
+  border-bottom: 1px solid rgba(216, 150, 40, 0.4);
+  color: #ffc86b;
+  font-size: calc(0.13 * var(--t, 1rem));
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.friends-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0.12rem 0.24rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.12rem;
+}
+
+.friend-item-card {
+  padding: 0.14rem 0.16rem;
+  background: rgba(20, 26, 23, 0.7);
+  border: 1px solid var(--line-1, rgba(255, 255, 255, 0.08));
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  transition: border-color var(--t-fast), background-color var(--t-fast);
+}
+
+.friend-item-card:hover {
+  background: rgba(26, 34, 30, 0.85);
+  border-color: var(--line-2, rgba(78, 216, 175, 0.3));
+}
+
+.friend-item-main {
+  display: flex;
+  align-items: center;
+  gap: 0.14rem;
+}
+
+.friend-item-meta {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.04rem;
+}
+
+.friend-item-name-row {
+  display: flex;
+  align-items: center;
+  gap: 0.08rem;
+}
+
+.friend-item-name {
+  font-size: calc(0.16 * var(--t, 1rem));
+  font-weight: 700;
+  color: var(--text-hi, #f0f4f2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.friend-item-tag {
+  font-size: calc(0.12 * var(--t, 1rem));
+  color: var(--text-lo, #7d8e87);
+}
+
+.friend-status-pill {
+  font-size: calc(0.11 * var(--t, 1rem));
+  padding: 0.02rem 0.08rem;
+  border-radius: 2px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+
+.friend-status-pill.is-online {
+  background: rgba(78, 216, 175, 0.18);
+  border: 1px solid rgba(78, 216, 175, 0.6);
+  color: var(--mint-300, #8ff0d1);
+}
+
+.friend-status-pill.is-in_run {
+  background: rgba(80, 160, 255, 0.18);
+  border: 1px solid rgba(80, 160, 255, 0.6);
+  color: #8ac0ff;
+}
+
+.friend-status-pill.is-offline {
+  background: rgba(120, 120, 120, 0.15);
+  border: 1px solid rgba(120, 120, 120, 0.3);
+  color: var(--text-lo, #7d8e87);
+}
+
+.friend-status-pill.is-unknown {
+  background: rgba(100, 100, 100, 0.1);
+  border: 1px solid rgba(100, 100, 100, 0.2);
+  color: var(--text-lo, #7d8e87);
+}
+
+.friend-progress-row {
+  font-size: calc(0.13 * var(--t, 1rem));
+  color: var(--text-mid, #adc0b7);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.08rem;
+  padding-top: 0.06rem;
+  border-top: 1px dashed rgba(255, 255, 255, 0.06);
+}
+
+.friend-progress-desc {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.friends-empty-box {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.16rem;
+  padding: 0.4rem 0.2rem;
+  color: var(--text-lo, #7d8e87);
+  text-align: center;
+}
+
+.friends-empty-title {
+  font-size: calc(0.16 * var(--t, 1rem));
+  color: var(--text-mid, #adc0b7);
+}
+
+/* Room screen share button */
+.rs-key__share {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.06rem;
+  height: 78%;
+  padding: 0 0.14rem;
+  font: inherit;
+  font-size: calc(0.18 * var(--t, 1rem));
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  color: #c9cecc;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 0.05rem;
+  cursor: pointer;
+  transition: all var(--t-fast, 150ms);
+}
+
+.rs-key__share:hover {
+  border-color: rgba(78, 216, 175, 0.5);
+  color: #f0f4f2;
+}
+
+.rs-key__share.is-on {
+  background: rgba(78, 216, 175, 0.2);
+  border-color: var(--mint-500, #4ed8af);
+  color: var(--mint-300, #8ff0d1);
+}
+
+.rs-key__share .icon {
+  width: 0.18rem;
+  height: 0.18rem;
+}

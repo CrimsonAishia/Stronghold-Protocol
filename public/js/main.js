@@ -73,6 +73,11 @@ import { recordError, installTrafficMeter } from './diag.js';
 import { installContent, installContentSet } from './content.js';
 import { cosmetics } from './cosmetics.js';
 import { sanitizeVersions, roomVersion, isDefaultVersion, matchFrameVersion } from './versions.js';
+import { createBakaboxBridge } from './integrations/bakaboxBridge.js';
+import { createSocialService, getSocialService } from './social/service.js';
+import { socialStore, setRoomShare } from './social/store.js';
+import { installPresence } from './social/presence.js';
+import { FriendsDrawer } from './ui/friendsDrawer.js';
 
 const RESTORE_GRACE_MS = 1500;
 const JOIN_DELAY_MS = 350;
@@ -83,7 +88,7 @@ const SCREENS = { title: TitleScreen, lobby: LobbyScreen, room: RoomScreen, game
 
 /** Copy of a server message without transport fields. */
 function payload(msg) {
-  const { t, rid, ...rest } = msg; // eslint-disable-line no-unused-vars
+  const { t, rid, ...rest } = msg;
   return rest;
 }
 
@@ -312,6 +317,10 @@ function wireNet() {
     // the match on screen is over (left, closed, kicked, a new session): a rehearsal task of it is dead, and the frame
     // that cancels it may never arrive (a disposed match sends nothing) — the page stops what it is running itself
     if (selectRoute(prev) === 'game' && selectRoute(s) !== 'game') rehearsal?.clear();
+    // Clearing room share on room leave or match start
+    if ((!s.room && prev.room) || (s.room?.inMatch && !prev.room?.inMatch)) {
+      setRoomShare(false);
+    }
   });
 }
 
@@ -362,6 +371,27 @@ function App() {
   useLang(); // a language switch re-renders the whole tree in place
   const [error, resetError] = useErrorBoundary((err) => console.error('[ui] screen crashed', err));
   const Screen = SCREENS[route] || LobbyScreen;
+
+  const handleJoinFriendRoom = async (code) => {
+    const s = store.get();
+    if (s.room) {
+      if (s.room.code !== code) toast(t('你已在其他同盟中，请先离开当前同盟'), 'warn');
+      return;
+    }
+    if (!s.session.entered || net.status !== 'online') {
+      store.patch('ui', { pendingJoin: code });
+      getSocialService()?.closeDrawer();
+      schedulePendingJoin();
+      return;
+    }
+    try {
+      await joinKnown('room.join', code);
+      getSocialService()?.closeDrawer();
+    } catch (err) {
+      toastError(err);
+    }
+  };
+
   return html`<div class="app-root">
     <div class="app-bg" aria-hidden="true"></div>
     ${error ? html`<${ScreenCrashed} error=${error} reset=${resetError} />` : html`<${Screen} key=${route} />`}
@@ -373,6 +403,7 @@ function App() {
     <${LoadoutHost} />
     <${StatsHost} />
     <${VoteOverOverlays} />
+    <${FriendsDrawer} service=${getSocialService()} onJoinRoom=${handleJoinFriendRoom} />
   </div>`;
 }
 
@@ -481,6 +512,21 @@ async function boot() {
   // the language (and its UI translations) before the first render: no Chinese flash for an English player
   const langReady = initLang().catch((err) => console.warn('[app] language setup failed', err));
   await Promise.all([waitForFonts(1200), connectWhenReady, langReady]);
+  // BakaBox integration: non-blocking startup
+  const bridge = createBakaboxBridge();
+  createSocialService({ bridge });
+  installPresence({
+    bridge,
+    store,
+    socialStore,
+    getShareRoomCode: () => {
+      const s = store.get();
+      const soc = socialStore.get();
+      if (!soc.roomShareEnabled || !s.room || s.room.inMatch) return null;
+      return s.room.code || null;
+    },
+  });
+
   const root = document.getElementById('app');
   render(html`<${App} />`, root);
 
