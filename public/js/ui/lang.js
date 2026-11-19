@@ -222,7 +222,12 @@ export async function initLang() {
     if (request !== langRequest) return null;
     if (fromUrl) savePref(PREF_KEY, lang);
     if (lang === DEFAULT_LANG) return null;
-    return (await loadLangChain(lang)) ? lang : null;
+    const ok = await loadLangChain(lang);
+    if (!ok) {
+      savePref(PREF_KEY, DEFAULT_LANG);
+      return null;
+    }
+    return lang;
   })();
   const got = await Promise.race([boot, new Promise((r) => setTimeout(() => r(TIMEOUT), BOOT_WAIT_MS))]);
   if (got === TIMEOUT) {
@@ -306,31 +311,11 @@ export function machineTranslationNote() {
 }
 
 /**
- * The language menu: 中文 | English | … as buttons, or the custom listbox when there are many packs.
- * @param {{ class?: string }} props
+ * The language menu: null when the release profile is Simplified Chinese only.
+ * @param {{ class?: string }} [props]
  */
-export function LangToggle({ class: cls }) {
-  const lang = useLang();
-  const menu = langMenuModel(useLangs(), lang);
-  const pick = async (code, select = null) => {
-    if (!code) return;
-    const switched = switchLang(code);
-    const request = langRequest;
-    await switched;
-    // A failed current request keeps the displayed language; stale requests must not reset a newer pending pick.
-    if (select && request === langRequest) select.value = getLang();
-  };
-  if (menu.kind === 'select') {
-    // Controlled by the applied language. A pack that fails to load never moves `lang`, so the
-    // shown value snaps back without writing a native select (the old select.value reset).
-    return html`<${ComboBox} class=${`lang-toggle lang-select${cls ? ` ${cls}` : ''}`} testId="lang-toggle" label=${SWITCH_LABEL} value=${lang}
-      options=${menu.items.map((it) => ({ value: it.code, label: it.label, lang: it.htmlLang, title: it.title, dataLang: it.code }))}
-      onChange=${(e) => pick(e.currentTarget.value)} />`;
-  }
-  return html`<div class=${`set-seg lang-toggle${cls ? ` ${cls}` : ''}`} role="radiogroup" aria-label=${SWITCH_LABEL} data-testid="lang-toggle">
-    ${menu.items.map((it) => html`<button key=${it.code} type="button" role="radio" lang=${it.htmlLang} aria-checked=${it.on ? 'true' : 'false'}
-      class=${it.on ? 'is-on' : ''} data-lang=${it.code} title=${it.title || undefined} onClick=${() => pick(it.code)}>${it.label}</button>`)}
-  </div>`;
+export function LangToggle({ class: cls } = {}) {
+  return null;
 }
 
 /**

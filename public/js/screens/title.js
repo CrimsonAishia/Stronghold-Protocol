@@ -25,7 +25,9 @@
 import { ReleaseNotesButton } from '../ui/releaseNotes.js';
 import { ResumeMatchButton } from '../ui/resumeMatch.js';
 import { ResourceManagerButton } from '../ui/resourceManager.js';
-import { useMemo, useState } from '../../vendor/hooks.module.js';
+import { useEffect, useMemo, useState } from '../../vendor/hooks.module.js';
+import { AssetPartDownloadPanel } from '../ui/assetPartDownload.js';
+import { assetPartDownloader } from '../assetPartDownload.js';
 import { APP_VERSION, DEV_BUILD } from '../../../shared/constants.js';
 import { html, Button, Icon, MicroLabel, PingPill } from '../ui/components.js';
 import { GuideButton } from '../ui/guide.js';
@@ -186,6 +188,12 @@ export function TitleScreen() {
   const name = profileName(profile);
   const showAssetTools = new URLSearchParams(globalThis.location?.search || '').get('asset-tools') === '1';
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [assetPartState, setAssetPartState] = useState(() => assetPartDownloader.get());
+  useEffect(() => {
+    const unsub = assetPartDownloader.subscribe(setAssetPartState);
+    void assetPartDownloader.check();
+    return unsub;
+  }, []);
   // the list of the server's plugins once loaded (ui/pluginPanel.js — a component in state: set through an updater)
   const [Installed, setInstalled] = useState(null);
   const openPlugins = () => {
@@ -283,7 +291,11 @@ export function TitleScreen() {
           <span>${t('收到同盟邀请')}</span><b class="num">${pendingJoin}</b><span class="t-lo">${canPlayOnline(profile) ? t('· 点击开始后将自动加入') : t('请先登录 BakaBox 后再使用联机功能')}</span>
         </div>` : null}
         <p class="title-identity"><${Icon} name="user" />${name || t('游客')}</p>
-        <${Button} variant="primary" size="xl" block=${true} iconRight="chevrons" onClick=${start}>${t('开始')}<//>
+        ${assetPartState.ready ? html`
+          <${Button} variant="primary" size="xl" block=${true} iconRight="chevrons" onClick=${start}>${t('开始')}<//>
+        ` : html`
+          <${AssetPartDownloadPanel} onComplete=${start} />
+        `}
         <div class="title-conn">
           <span class=${`status-dot ${dotClass}`}></span>
           <span>${STATUS_TEXT[conn.status] ? t(STATUS_TEXT[conn.status]) : conn.status}</span>

@@ -22,6 +22,7 @@ import { PROTOCOL_VERSION, APP_VERSION } from '../../shared/constants.js';
 import { buildTag } from './buildTag.js';
 import { setSecurityHeaders, sendError, sendJson, splitUrl } from './common.js';
 import { clientAddress, isLocalIp } from '../net.js';
+import { handleAssetManifest, handleAssetStream } from './assetDistribution.js';
 
 const MAX_URL_LENGTH = 4096;
 
@@ -106,6 +107,14 @@ export function createRequestHandler({ serveStatic, health, log, trustProxy = 'a
     if (parts.rawPath === '/healthz') {
       const withTraffic = wantsTraffic(parts.query) && isLocalIp(clientAddress(req, trustProxy).ip);
       sendJson(req, res, 200, healthReport(health, withTraffic));
+      return;
+    }
+    if (parts.rawPath === '/api/asset-part/manifest') {
+      await handleAssetManifest(req, res);
+      return;
+    }
+    if (parts.rawPath === '/api/asset-part/stream') {
+      await handleAssetStream(req, res, parts.query);
       return;
     }
     await serveStatic(req, res, parts.rawPath, parts.query);

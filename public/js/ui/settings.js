@@ -36,7 +36,7 @@ import { sanitizeSettings, HOTKEY_ACTIONS, DEFAULT_HOTKEYS, hotkeyLabel, rebindH
 import { audio } from '../audio.js';
 import { openGuide } from './guide.js';
 import { detectFeatures, isIOS } from './device.js';
-import { LangToggle, machineTranslationNote } from './lang.js';
+import { LangToggle, machineTranslationNote, useLangs } from './lang.js';
 import { t, tc, tParts, N_ } from '../../../shared/i18n.js';
 import { errorCount, currentBattle, diagnosticsText } from '../diag.js';
 import { copyText } from './clipboard.js';
@@ -153,6 +153,8 @@ const TEXT_SCALES = [['sm', N_('小')], ['md', N_('中')], ['lg', N_('大')], ['
  */
 const VOICE_LANG_NAMES = { cn: '中文', jp: '日本語', en: 'English', kr: '한국어' }; // i18n-ignore
 const VOICE_LANG_TAGS = { cn: 'zh', jp: 'ja', en: 'en', kr: 'ko' };
+/** Setting dialog only shows Chinese and Japanese voice dubs per asset distribution plan. */
+const SETTINGS_VOICE_LANGS = Object.freeze(['cn', 'jp']);
 /** The rebindable shortcuts' names (msgids), by action. */
 const HOTKEY_NAMES = { buy: N_('购买鼠标指向的商品'), refresh: N_('刷新商店'), freeze: N_('冻结 / 解冻商店'), levelUp: N_('升级调度中心'), retreat: N_('撤退干员（选中优先）'),
   sell: N_('出售干员（选中优先）'), ready: N_('准备就绪 / 暂停（独立模拟）') };
@@ -492,11 +494,6 @@ export function SettingsModal({ open, onClose }) {
                         actions=${html`<${Button} variant="secondary" icon="book" class="set-guide" onClick=${() => openGuide(0)}>${t('玩法说明')}<//>
                         <${Button} variant="primary" icon="check" onClick=${onClose}>${t('完成')}<//>`}>
     <div class="set-list">
-      <${SetHead} icon="book" title=${t('语言')} micro="LANGUAGE" />
-      <div class="set-row set-row--lang">
-        <${LangToggle} class="set-lang" />
-      </div>
-      ${mtNote ? html`<p class="set-hint set-lang-note" data-testid="lang-mt-note">${mtNote}</p>` : null}
       <${SetHead} icon="music" title=${t('声音')} micro="SOUND" />
       <${Slider} label=${t('背景音乐')} micro="BGM" icon="play" value=${s.bgm} onInput=${(v) => updateSettings({ bgm: v })} />
       <${Slider} label=${t('干员语音')} micro="VOICE" icon="mic" value=${s.voice} onInput=${(v) => updateSettings({ voice: v })} />
@@ -504,11 +501,11 @@ export function SettingsModal({ open, onClose }) {
         <span class="set-row__label">${t('语音语言')}<${MicroLabel}>VOICE LANGUAGE<//></span>
         <div class="set-voice">
           <div class="set-seg" role="radiogroup" aria-label=${t('语音语言')} data-testid="voice-lang">
-            ${VOICE_LANGS.map((id) => html`<button key=${id} type="button" role="radio" aria-checked=${s.voiceLang === id ? 'true' : 'false'}
+            ${SETTINGS_VOICE_LANGS.map((id) => html`<button key=${id} type="button" role="radio" aria-checked=${s.voiceLang === id ? 'true' : 'false'}
               lang=${VOICE_LANG_TAGS[id]} class=${s.voiceLang === id ? 'is-on' : ''} onClick=${() => updateSettings({ voiceLang: id })}>${VOICE_LANG_NAMES[id]}</button>`)}
           </div>
-          <button type="button" class=${s.voiceNative ? 'set-native is-on' : 'set-native'} data-testid="voice-native" aria-pressed=${s.voiceNative ? 'true' : 'false'}
-            title=${t('有本土语言配音时使用')} onClick=${() => updateSettings({ voiceNative: !s.voiceNative })}>${tc('voice-lang', '本土语言')}</button>
+          ${data.assets?.audio?.voiceNative ? html`<button type="button" class=${s.voiceNative ? 'set-native is-on' : 'set-native'} data-testid="voice-native" aria-pressed=${s.voiceNative ? 'true' : 'false'}
+            title=${t('有本土语言配音时使用')} onClick=${() => updateSettings({ voiceNative: !s.voiceNative })}>${tc('voice-lang', '本土语言')}</button>` : null}
         </div>
       </div>
       <${Slider} label=${t('音效')} micro="SFX" icon="signal" value=${s.sfx}
