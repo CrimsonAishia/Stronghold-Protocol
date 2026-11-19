@@ -52,7 +52,7 @@ import { AchievementDialog, useStatsOpen } from './stats.js';
 import { SweepReport } from './sweep.js';
 import { Emblem } from './title.js';
 import { SettingsButton } from '../ui/settings.js';
-import { detectFeatures, useMediaQuery, SHORT_SCREEN_QUERY } from '../ui/device.js';
+import { detectFeatures } from '../ui/device.js';
 import { LoadoutButton } from './loadout.js';
 import { FriendsDrawerButton } from '../ui/friendsDrawer.js';
 import { socialStore } from '../social/store.js';
@@ -595,16 +595,10 @@ export function ProtocolSelect({ roomMode, difficulty, onDifficulty, onClose, on
  * 玩法说明 under it, at the right the 创建同盟 card (creates the room at once at `difficulty`, the remembered one, which the
  * host changes in the room; the test-room box under it while the server runs in test mode; AI teammates are added in the
  * room) and the 加入同盟 card (the key field — the project's TextField — with 观战, the recent keys that only fill it,
- * 加入同盟). The project's Modal styled to fill the screen. `short`: the screen is at most 520 px tall (the lobby's
- * useMediaQuery(SHORT_SCREEN_QUERY)) — the key field, beside 观战 in a column about 300 px wide, is about 150 px there,
- * so its placeholder is the field's name alone (同盟密钥) instead of the whole 输入同盟密钥 / 粘贴邀请链接, which ran under
- * 观战 at 特大 in English and Japanese (§35.18's leftover); the line under the field still tells where a key comes from.
- * On a taller screen the field's name stands in too wherever the whole sentence does not fit the field (TextField
- * `placeholderShort`, by the field's width: English and Japanese at 特大 on every desktop, the default Chinese at 特大
- * in a 1024 px window — it ended in an ellipsis there).
+ * 加入同盟). The project's Modal styled to fill the screen. The field is labelled 同盟密钥.
  */
 export function AllianceSelect({ onClose, onCreate, difficulty = 'FUNNY', code, onCode, codeOk, online, busy, onJoin, onSpectate, recent, marks, focusKey,
-  testMode = false, asTest = false, onTest = () => {}, short = false }) {
+  testMode = false, asTest = false, onTest = () => {} }) {
   const diffName = DIFFICULTY_NAMES[difficulty] ? t(DIFFICULTY_NAMES[difficulty]) : '';
   return html`<${Modal} open=${true} onClose=${onClose} class="ally" veilClass="proto-veil">
     <div class="ally__body">
@@ -637,7 +631,7 @@ export function AllianceSelect({ onClose, onCreate, difficulty = 'FUNNY', code, 
             <span class="ally-card__art"><${JoinArt} /></span>
             <div class="ally-key">
               <${TextField} class="ally-key__field" size="key" icon="key" value=${code} transform=${normalizeCode} onInput=${onCode} onEnter=${() => onJoin()}
-                placeholder=${short ? t('同盟密钥') : t('输入同盟密钥 / 粘贴邀请链接')} placeholderShort=${t('同盟密钥')} ariaLabel=${t('同盟密钥')}
+                placeholder=${t('同盟密钥')} placeholderShort=${t('同盟密钥')} ariaLabel=${t('同盟密钥')}
                 modalFocus=${!!focusKey} />
               <button type="button" class="ally-key__spec join-spectate" disabled=${!codeOk || !online || busy === 'spectate'} onClick=${() => onSpectate()}
                 title=${t('以观战者身份进入：不占博士席位，只能观看（每个同盟最多 {MAX_SPECTATORS} 名，模拟进行中也可进入）', { MAX_SPECTATORS })}>
@@ -647,7 +641,7 @@ export function AllianceSelect({ onClose, onCreate, difficulty = 'FUNNY', code, 
               ${recent.length ? html`<span class="t-lo">${t('最近的同盟')}</span>
                 ${recent.map((c) => html`<button key=${c} type="button" class="code-chip num" title=${t('填入密钥（不会直接加入）')}
                   onClick=${() => onCode(c)}>${c}${Array.isArray(marks) && marks.includes(c) ? html` <${TestMark} />` : null}</button>`)}`
-                : html`<span class="t-dim">${t('向同伴索取 {ROOM_CODE_LEN} 位同盟密钥，或直接打开邀请链接', { ROOM_CODE_LEN })}</span>`}
+                : null}
             </span>
             <button type="button" class="ally-card__bar ally-card__bar--join" disabled=${!codeOk || !online || busy === 'join'} onClick=${() => onJoin()}>
               <span class="ally-card__icon"><${Icon} name="users" /></span>${t('加入同盟')}${busy === 'join' ? html`<${Spinner} size="sm" />` : null}
@@ -684,7 +678,6 @@ export function LobbyScreen() {
   const [sweepOpen, setSweepOpen] = useState(false);
   const [achOpen, setAchOpen] = useState(false);
   const [coarse] = useState(() => detectFeatures().coarse);
-  const shortScreen = useMediaQuery(SHORT_SCREEN_QUERY);
   const alive = useRef(true);
   const inFlight = useRef(false); // synchronous guard against double clicks (state updates are async)
   useEffect(() => () => { alive.current = false; }, []);
@@ -809,7 +802,7 @@ export function LobbyScreen() {
     ${allyOpen ? html`<${AllianceSelect} onClose=${() => setAllyOpen(false)} onCreate=${() => create('coop')} difficulty=${shownCoop}
       code=${code} onCode=${(v) => setCode(normalizeCode(v))} codeOk=${codeOk} online=${online && loggedIn} busy=${busy}
       onJoin=${join} onSpectate=${spectate} recent=${recent} marks=${marks} focusKey=${!coarse}
-      testMode=${testMode} asTest=${asTest} onTest=${setAsTest} short=${shortScreen} />` : null}
+      testMode=${testMode} asTest=${asTest} onTest=${setAsTest} />` : null}
     ${soloOpen ? html`<${ProtocolSelect} roomMode="solo" difficulty=${shownSolo} onDifficulty=${pickDifficulty}
       onClose=${() => setSoloOpen(false)} onCreate=${() => create('solo')} busy=${busy} online=${online}
       testMode=${testMode} asTest=${asTest} onTest=${setAsTest} difficulties=${solo} loading=${versionLoading} failed=${versionFailed}

@@ -179,13 +179,6 @@ export function botNameParts(seat) {
   return m ? [m[1], m[2]] : null;
 }
 
-/** Invite link for a room code (current page URL with ?room=CODE). */
-export function inviteLink(code) {
-  const loc = globalThis.location;
-  const base = loc ? `${loc.origin}${loc.pathname}` : '';
-  return `${base}?room=${encodeURIComponent(code)}`;
-}
-
 /**
  * Copy text to the clipboard (async API with a textarea fallback for insecure contexts). Moved to ui/clipboard.js so
  * 干员调配 can use it without importing this screen (which imports loadout.js): re-exported here for existing callers.
@@ -597,15 +590,9 @@ export function RoomScreen() {
         ? html`<span class="t-mint">${t('已就绪 · 等待创建者开始模拟')}</span>`
         : html`<span class="t-lo">${t('准备就绪后，创建者即可开始模拟')}</span>`;
 
-  const copy = async (what) => {
-    // the copied link carries an invitation line (#103): 「{name}邀请你加入卫戍协议：盟约【{difficulty}】」 — with the
-    // version's name for another official version (DESIGN §35.23)
-    const params = { name: me.name ?? '', difficulty: DIFFICULTY_NAMES[room.difficulty] ? t(DIFFICULTY_NAMES[room.difficulty]) : '' };
-    const invite = roomVersion(room) !== DEFAULT_VERSION
-      ? t('{name}邀请你加入卫戍协议：盟约·{version}【{difficulty}】', { ...params, version: versionLabel(roomVersion(room)) })
-      : t('{name}邀请你加入卫戍协议：盟约【{difficulty}】', params);
-    const ok = await copyText(what === 'code' ? room.code : `${inviteLink(room.code)} ${invite}`);
-    if (ok) toast(what === 'code' ? t('已复制同盟密钥 {code}', { code: room.code }) : t('已复制邀请链接'), 'success');
+  const copy = async () => {
+    const ok = await copyText(room.code);
+    if (ok) toast(t('已复制同盟密钥 {code}', { code: room.code }), 'success');
     else toast(t('复制失败，请手动复制'), 'warn');
   };
   // 选择模拟协议 over the room: the host picks and sends the difficulty on 确认 (nothing to send when it did not change —
@@ -692,8 +679,7 @@ export function RoomScreen() {
         ${coop ? html`<div class="rs-key">
           <span class="rs-key__k">${t('同盟密钥')}</span>
           <b class="rs-key__code num selectable" aria-label=${t('同盟密钥 {code}', { code: room.code })}>${room.code}</b>
-          <button type="button" class="rs-key__copy" onClick=${() => copy('code')} title=${t('复制密钥')}>${t('复制')}</button>
-          <button type="button" class="rs-key__link" onClick=${() => copy('link')} title=${t('复制链接')} aria-label=${t('复制链接')}><${Icon} name="link" /></button>
+          <button type="button" class="rs-key__copy" onClick=${copy} title=${t('复制密钥')}>${t('复制')}</button>
           ${hostAvailable ? html`
             <button
               type="button"
@@ -719,7 +705,7 @@ export function RoomScreen() {
         // the player's outfit for that operator (header "Outfits"); null = the default art
         const skin = op ? seatCardSkin(s, op.chess.charId, { myId: me.playerId, localSkins, players: facts.occupied, otherSkins }) : null;
         return html`<${SeatCard} key=${s ? `p${s.playerId}` : `e${i}`} seat=${s} index=${i} room=${room} facts=${facts}
-          myId=${me.playerId} busy=${busy} onAddBot=${addBot} onRemoveBot=${removeBot} onKick=${kick} onInvite=${() => copy('code')}
+          myId=${me.playerId} busy=${busy} onAddBot=${addBot} onRemoveBot=${removeBot} onKick=${kick} onInvite=${copy}
           portrait=${op ? chessPortraitUrl(data.get('assets'), op.chess, { skin }) : null}
           portraitDefault=${op && skin ? chessPortraitUrl(data.get('assets'), op.chess) : null} operator=${op?.chess} onPickCard=${() => setPicking(true)}
           fresh=${shownRoom.current === room.code} />`;

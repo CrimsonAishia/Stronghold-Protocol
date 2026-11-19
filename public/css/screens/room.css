@@ -141,19 +141,6 @@
   border-radius: .05rem;
 }
 .rs-key__copy:hover, .rs-key__copy:focus-visible { filter: brightness(1.06); }
-.rs-key__link {
-  display: grid;
-  place-items: center;
-  width: max(.44rem, 28px);
-  height: 78%;
-  padding: 0;
-  color: #c9cecc;
-  background: rgba(255, 255, 255, .06);
-  border: 1px solid rgba(255, 255, 255, .15);
-  border-radius: .05rem;
-}
-.rs-key__link:hover, .rs-key__link:focus-visible { border-color: rgba(255, 255, 255, .4); }
-.rs-key__link .icon { width: 60%; height: 60%; }
 .rs-key--solo { gap: .1rem; padding-right: .2rem; font-size: calc(.16 * var(--t)); color: #b7bdbb; }
 
 /* ---- seats: a tall card (strip, portrait, state) and the name plate under it ---------------------------------- */
