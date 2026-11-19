@@ -76,6 +76,7 @@ import { skinsStore, SKINS_KEY, ownerSkin } from '../ui/skins.js';
 import { settingsStore } from '../ui/settingsStore.js';
 import { difficultyInfo, ProtocolSelect } from './lobby.js';
 import { useRise } from '../ui/transitions.js';
+import { RoomChat } from '../ui/roomChat.js';
 import { t, tc } from '../../../shared/i18n.js';
 
 /**
@@ -739,7 +740,9 @@ export function RoomScreen() {
     ${bannerText ? html`<p class="rs-verbanner" data-testid="version-banner"><${Icon} name="info" />${bannerText}</p>` : null}
 
     <footer class="room-bar rs-foot">
-      <div class="rs-foot__left" aria-hidden="true"></div>
+      <div class="rs-foot__left">
+        ${coop ? html`<${RoomChat} />` : null}
+      </div>
       <div class="rs-foot__center">
         <p class="rs-hint">${coop ? html`<span class="rs-ready num" title=${t('已就绪')}>${facts.humans.map((s) => html`<${Icon} key=${s.playerId} name="user" class=${facts.isReady(s) ? 'is-on' : ''} />`)}<b>${facts.readyHumans}</b>/${facts.humans.length}</span>` : null}<span class="room-bar__status">${statusLine}</span></p>
         <div class="rs-pill">

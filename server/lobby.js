@@ -427,6 +427,12 @@ export class Room {
     this.matchKey = null;
     this.createdAt = now;
     this.disposed = false;
+    /** @type {{ seq: number, playerId: string, name: string, text: string, at: number }[]} */
+    this.chat = [];
+    this.chatSeq = 0;
+    this.chatId = randomBytes(16).toString('hex');
+    /** @type {Map<string, number>} */
+    this.chatSentAt = new Map();
     /**
      * The content set the room plays (DESIGN §32): `{ cs, vanilla, plugins }` — the server's vanilla set, or with the
      * cosmetic plugins its host switched on (header "The room's plugins": `vs`, `warnings`, `bytes` beside them), or a
@@ -475,6 +481,7 @@ export class Room {
       t: 'room.state',
       ...(this.aiTakeoverEnabled ? { aiTakeoverEnabled: true, aiTakeoverVotes: this.aiTakeoverVotes || [] } : {}),
       code: this.code,
+      chatId: this.chatId,
       hostId: this.hostId,
       mode: this.mode,
       difficulty: this.difficulty,
@@ -815,6 +822,8 @@ export class Lobby {
       case 'room.create': return this.create(session, msg);
       case 'room.join': return this.join(session, msg);
       case 'room.leave': return this.leave(session);
+      case 'room.chat': return this.chatMessage(session, msg);
+      case 'room.chatHistory': return this.chatHistory(session);
       case 'room.ready': return this.ready(session, msg);
       case 'room.setDifficulty': return this.setDifficulty(session, msg);
       case 'room.setAiPicksLast': return this.setAiPicksLast(session, msg);
@@ -850,6 +859,34 @@ export class Lobby {
         if (typeof msg.t === 'string' && msg.t.startsWith('g.')) return this.routeGameNow(session, msg);
         return fail(ERR.BAD_MSG, `unhandled type ${String(msg.t).slice(0, 32)}`);
     }
+  }
+
+  /** [ASSUMED] Room chat is ephemeral and limited to one message per second per member.
+   * @param {import('./net.js').Session} session @param {{ text: string, chatId?: string }} msg
+   */
+  chatMessage(session, msg) {
+    const room = this.roomOf(session);
+    if (!room || room.disposed || (!room.seatOf(session.playerId) && !room.spectatorOf(session.playerId))) return fail(ERR.NOT_IN_ROOM);
+    if (msg.chatId !== undefined && msg.chatId !== room.chatId) return fail(ERR.NOT_IN_ROOM, 'room changed');
+    const text = msg.text.replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim();
+    if (!text) return fail(ERR.BAD_MSG, 'empty chat');
+    const now = this.now();
+    const last = room.chatSentAt.get(session.playerId);
+    if (last !== undefined && now - last < 1000) return fail(ERR.RATE, 'chat too often');
+    room.chatSentAt.set(session.playerId, now);
+    const item = { seq: ++room.chatSeq, playerId: session.playerId, name: session.name, text, at: now };
+    room.chat.push(item);
+    if (room.chat.length > 50) room.chat.shift();
+    this.broadcastRoom(room, { t: 'm.chat', roomCode: room.code, chatId: room.chatId, ...item });
+    return { ok: true };
+  }
+
+  /** @param {import('./net.js').Session} session */
+  chatHistory(session) {
+    const room = this.roomOf(session);
+    if (!room || room.disposed || (!room.seatOf(session.playerId) && !room.spectatorOf(session.playerId))) return fail(ERR.NOT_IN_ROOM);
+    sendSession(session, { t: 'm.chat.history', roomCode: room.code, chatId: room.chatId, messages: room.chat.slice() });
+    return { ok: true };
   }
 
   /** The session's socket closed. @param {import('./net.js').Session} session */
@@ -2357,6 +2394,7 @@ export class Lobby {
     const session = this.registry.byId(playerId);
     if (session && session.roomCode === room.code) session.roomCode = null;
     this.clearGrace(playerId);
+    room.chatSentAt.delete(playerId);
     this.dropReplay(room, playerId);
     if (this.freeSpectatorSeat(room, playerId)) return;
     const seat = room.seatOf(playerId);
@@ -2437,6 +2475,8 @@ export class Lobby {
   disposeRoom(room, reason) {
     if (room.disposed) return;
     room.disposed = true;
+    room.chat.length = 0;
+    room.chatSentAt.clear();
     if (this.rooms.get(room.code) === room) { this.trustedRuntime?.event('roomClosed',{room:room.toState(this.now())}); this.rooms.delete(room.code); }
     // an open version vote ends with the room (its timer)
     if (room.versionVote) { clearTimeout(room.versionVote.timer); room.versionVote = null; }

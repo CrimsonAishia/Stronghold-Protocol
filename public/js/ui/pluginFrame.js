@@ -20,6 +20,7 @@
 // others with tabs in the slot. Nothing here calls net.send. A match intent is rejected locally.
 
 import { store } from '../store.js';
+import { net } from '../net.js';
 import { battleRunner } from '../battle/runner.js';
 import { catalog, loadCatalog, installedCount, pluginName } from '../content.js';
 import { toast } from './toasts.js';
@@ -290,20 +291,24 @@ function mount(entry, preview = null) {
   const rec = { id, iframe, declared, entry, ready: false, preview, entries: preview ? Object.create(null) : loadEntries(id), limitAt: 0, loads: 0, closed: false };
   frames.set(id, rec);
   autoGrant(id, declared);
-  iframe.addEventListener('load', () => {
-    if (frames.get(id) !== rec || rec.closed) return;
-    rec.loads += 1;
-    const decision = frameLoadDecision(rec.loads);
-    if (decision === 'destroy') { stopForLeaving(id); return; }
-    // The entry document. welcome does not include the private view; ready (accepted only at this count) does.
-    // `net` is not the private view: the panel reads it during mount, before ready.
-    if (decision === 'entry') {
-      if (!rec.preview) postNetNow(rec);
-      post(rec, hostWelcome(id, declared, rec.preview ? undefined : welcomeInfo(rec)));
-    }
-  });
+  watchFrame(rec);
   iframe.src = src;
   place(rec);
+}
+
+/** @param {FrameRec} rec */
+function watchFrame(rec) {
+  const iframe = rec.iframe;
+  iframe.addEventListener('load', () => {
+    if (frames.get(rec.id) !== rec || rec.closed || rec.iframe !== iframe) return;
+    rec.loads += 1;
+    const decision = frameLoadDecision(rec.loads);
+    if (decision === 'destroy') { stopForLeaving(rec.id); return; }
+    if (decision === 'entry') {
+      if (!rec.preview) postNetNow(rec);
+      post(rec, hostWelcome(rec.id, rec.declared, rec.preview ? undefined : welcomeInfo(rec)));
+    }
+  });
 }
 
 /** @param {string} id @returns {Record<string, string>} */
@@ -541,7 +546,10 @@ function onWindowMessage(ev) {
     if (rejected.length < 50) rejected.push('intent');
     post(rec, hostRejected('intent'));
   }
-  if (!allowed) { noteLimit(rec); return; }
+  if (!allowed) {
+    noteLimit(rec);
+    return;
+  }
   if (!verdict.ok) {
     if (verdict.reason !== 'intent') post(rec, hostRejected(verdict.reason));
     return;
@@ -552,7 +560,8 @@ function onWindowMessage(ev) {
   // so ready on the new document does not pull state. A task that was queued even earlier can still post once
   // (DESIGN §32.8 [ASSUMED]).
   setTimeout(() => {
-    if (frames.get(rec.id) !== rec || rec.closed) return;
+    if (frames.get(rec.id) !== rec || rec.closed || rec.iframe.contentWindow !== ev.source) return;
+    if (rec.loads === 0) return; // The host is moving the frame; wait for its entry load.
     if (frameLoadDecision(rec.loads) === 'destroy') { stopForLeaving(rec.id); return; }
     handle(rec, msg);
   }, 0);

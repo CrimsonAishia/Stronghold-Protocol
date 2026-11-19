@@ -15,7 +15,7 @@
 //                                                                            it on for the room, a player for themself
 //   content    data patches and new records: operators, enemies, waves …    loaded (P1b): combined and validated on request
 //   script     code the battle or the match runs                             trusted execution, owner gated (P3a)
-//   ui         interface widgets in a sandboxed frame                        loaded (P4): personal, read-only postMessage,
+//   ui         interface widgets in a sandboxed frame                        loaded (P4): personal, optional chat,
 //                                                                            never a match intent (shared/plugins/ui.js)
 //   trusted    page or server code with full trust                           experimental, owner gated (P3a)
 // Script/server code requires the P3a owner gates (DESIGN §32.10). A ui plugin's page (P4, DESIGN §32.8)
@@ -111,7 +111,7 @@ export const PLUGIN_CLASSES = Object.freeze({
   cosmetic: Object.freeze({ status: 'supported', summary: 'art, models and audio: the room\'s host switches it on for the room, a player for themself (P1a)', scopes: ['room', 'personal'], defaultScope: ['room', 'personal'], unofficial: true, packType: 'assets', ext: MEDIA }),
   content: Object.freeze({ status: 'supported', summary: 'data patches and new records: operators, enemies, waves, modes (P1b)', scopes: ['room'], defaultScope: ['room'], unofficial: true, packType: 'data', ext: MEDIA }),
   script: Object.freeze({ status: 'supported', summary: 'battle or match code, disabled unless the owner enables and pins it (P3a)', scopes: ['room'], defaultScope: ['room'], unofficial: true, packType: 'script', ext: [...MEDIA, '.js'] }),
-  ui: Object.freeze({ status: 'supported', summary: 'interface widgets in a sandboxed frame (P4): read-only, personal, cannot send a match intent', scopes: ['personal'], defaultScope: ['personal'], unofficial: true, packType: 'ui', ext: ['.json', '.html', '.js', '.css', '.png'] }),
+  ui: Object.freeze({ status: 'supported', summary: 'interface widgets in a sandboxed frame (P4): personal, optional room chat, cannot send a match intent', scopes: ['personal'], defaultScope: ['personal'], unofficial: true, packType: 'ui', ext: ['.json', '.html', '.js', '.css', '.png'] }),
   trusted: Object.freeze({ status: 'supported', summary: 'native page/server code, disabled unless the owner enables and pins it (P3a)', scopes: ['server', 'room'], defaultScope: ['server'], unofficial: true, packType: 'trusted', ext: [...MEDIA, '.js', '.html', '.css'] }),
 });
 

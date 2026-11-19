@@ -1,6 +1,6 @@
 // shared/plugins/ui.js — the interface-plugin bridge (DESIGN §32.8, docs/PLUGINS.md §14). No Node builtin: the registry,
 // the static server and the page (public/js/ui/pluginFrame.js) share it. A ui plugin's page runs in a sandboxed iframe
-// and may only talk to the host through this postMessage API (v: 1). It is read-only: nothing here is a match intent,
+// and may only talk to the host through this postMessage API (v: 1). Chat is permission-gated; nothing here is a match intent,
 // and a message that looks like one is refused (shared/protocol.js C2S — the test pins every current key).
 //
 // [ASSUMED] limits, marked here and in DESIGN §32.8:

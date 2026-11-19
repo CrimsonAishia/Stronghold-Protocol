@@ -2415,5 +2415,13 @@
   "停止向好友分享房间": "Stop sharing room with friends",
   "向好友分享房间": "Share room with friends",
   "已分享": "Shared",
-  "向好友分享": "Share"
+  "向好友分享": "Share",
+  "房间聊天": "Room Chat",
+  "暂无聊天记录": "No messages yet",
+  "输入消息…": "Type a message...",
+  "聊天消息": "Chat Message",
+  "发送": "Send",
+  "未连接或不在房间中": "Not connected or not in room",
+  "发送失败，请重试": "Failed to send, please try again",
+  "发送太快，请稍后再试": "Sending too fast, please try again later"
 }

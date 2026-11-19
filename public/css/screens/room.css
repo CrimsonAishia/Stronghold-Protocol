@@ -772,8 +772,9 @@
 @media (max-width: 900px) {
   /* the centre column takes what the button leaves (it keeps its width); the status line and the pill sit at its start, as
      narrow as their text (left-aligned, as before the §35.18 review) */
-  .rs-foot { grid-template-columns: minmax(0, 1fr) auto; }
-  .rs-foot__left { display: none; }
+  .rs-foot { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .rs-foot__left { display: flex; align-items: flex-end; }
+  .rs-foot__left:empty { display: none; }
   .rs-foot__center { justify-self: start; max-width: 100%; }
 }
 @media (max-aspect-ratio: 1/1) {

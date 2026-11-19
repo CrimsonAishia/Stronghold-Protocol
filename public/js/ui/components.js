@@ -85,6 +85,7 @@ export const ICONS = {
   // 大厅背景与音乐 (ui/lobbyMedia.js): a framed picture (ridges and a sun) and a beamed pair of notes
   image: { d: 'M3 4h18v16H3zM5 6v9.6l4-4.6 3.5 4 2.5-3 4 4.4V6zM16 7.5a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3z', eo: true },
   music: { d: 'M18 3h2v13h-2zM8 5.4h2V18H8zM8 5.4 20 3v3L8 8.4zM14 16a3 3 0 1 1 6 0 3 3 0 1 1-6 0zM4 18a3 3 0 1 1 6 0 3 3 0 1 1-6 0z' },
+  chat: { d: 'M4 4h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H7l-4 4V6a2 2 0 0 1 2-2zm0 2v11.2L6.8 16H20V6H4z', eo: true },
 };
 
 /**
