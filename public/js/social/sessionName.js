@@ -14,7 +14,7 @@ export function installSessionName({ net, store, socialStore }) {
   const sync = () => {
     if (!store.get().session.entered || socialStore.get().profileChecked === false) return;
     const name = profileName(socialStore.get().selfProfile);
-    net.setName(name || '游客', { guest: !name, loggedIn: !!name }); // i18n-ignore (server-assigned player name)
+    net.setName(name || '游客', { guest: !name, loggedIn: !!name, avatarUrl: name ? socialStore.get().selfProfile?.avatar : null }); // i18n-ignore (server-assigned player name)
   };
   const unsubProfile = socialStore.subscribe(sync);
   const unsubSession = store.subscribe((state, prev) => {

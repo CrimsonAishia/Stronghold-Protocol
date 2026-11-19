@@ -31,12 +31,12 @@ export function transferAiSeat(lobby, room, applicantId, botId) {
   ps._botPrepToken = (ps._botPrepToken || 0) + 1;
   m.cancelSeatRehearsal(botId);
   Object.assign(ps, { isBot: false, autoplay: false, connected: true, ready: false, name: session.name });
-  Object.assign(seat, { isBot: false, connected: true, left: false, ready: false, name: session.name });
+  Object.assign(seat, { isBot: false, connected: true, left: false, ready: false, name: session.name, avatarUrl: session.avatarUrl });
   m.loneHuman = m.order.filter(p => !p.isBot && !p.left).length === 1;
   ps.aiTakeoverRound = m.round;
   session.aiTakeoverFrom = applicantId; m.markPublic(); ps.dirty();
   resetStateDelta(conn.ws);
-  lobby.network.onHelloMsg(conn, { t: 'hello', version: PROTOCOL_VERSION, delta: stateDeltaVersion(conn.ws), name: session.name, token: session.token, bakaboxLoggedIn: session.bakaboxLoggedIn }, lobby.now());
+  lobby.network.onHelloMsg(conn, { t: 'hello', version: PROTOCOL_VERSION, delta: stateDeltaVersion(conn.ws), name: session.name, token: session.token, bakaboxLoggedIn: session.bakaboxLoggedIn, ...(session.avatarUrl ? { avatarUrl: session.avatarUrl } : {}) }, lobby.now());
   lobby.broadcastState(room); return { ok: true };
 }
 // [ASSUMED] Any electorate change cancels rather than lowering the approval threshold.

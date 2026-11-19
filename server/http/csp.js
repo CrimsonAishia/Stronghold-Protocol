@@ -7,6 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { normalizeAssetCdn } from './assetCdn.js';
+import { AVATAR_ORIGINS } from '../../shared/avatar.js';
 
 // SES evaluates confined code. This relaxation belongs only to the simulation Worker, never its parent document.
 export const SIM_WORKER_CSP = "default-src 'none'; script-src 'self' 'unsafe-eval'; connect-src 'none'";
@@ -22,5 +23,5 @@ export function siteCsp(publicDir, assetCdn = '') {
       hashes.add(`'sha256-${createHash('sha256').update(m[1]).digest('base64')}'`);
     }
   }
-  return `default-src 'self'; script-src 'self'${hashes.size ? ' ' + [...hashes].join(' ') : ''}; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com${artSource}; font-src 'self' https://fonts.gstatic.com${artSource}; img-src 'self' data: blob:${artSource}; media-src 'self' blob:${artSource}; connect-src 'self'${artSource}; worker-src 'self' blob:; frame-src 'self'; object-src 'none'; base-uri 'none'`;
+  return `default-src 'self'; script-src 'self'${hashes.size ? ' ' + [...hashes].join(' ') : ''}; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com${artSource}; font-src 'self' https://fonts.gstatic.com${artSource}; img-src 'self' data: blob: ${AVATAR_ORIGINS.join(' ')}${artSource}; media-src 'self' blob:${artSource}; connect-src 'self'${artSource}; worker-src 'self' blob:; frame-src 'self'; object-src 'none'; base-uri 'none'`;
 }

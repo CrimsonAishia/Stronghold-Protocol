@@ -9,6 +9,7 @@ import { isContentHash } from './plugins/identity.js';
 import { isPluginId } from './plugins/manifest.js';
 import { isTestCommand } from './testMode.js';
 import { PLUGIN_OFFER_SLOTS } from './plugins/limits.js';
+import { isAvatarUrl } from './avatar.js';
 
 // ---- tiny validators -------------------------------------------------------
 const isInt = (v, lo = -Infinity, hi = Infinity) => Number.isInteger(v) && v >= lo && v <= hi;
@@ -499,8 +500,8 @@ export const C2S = {
   // `m.state` frames. Omitted by every client that cannot decode them — those keep receiving the plain frames, and a
   // server that does not know the field ignores it (it is only read after a full validateC2S pass).
   hello: { name: (v) => isStr(v, NAME_MAX_LEN) && v.trim().length > 0, token: (v) => v == null || isStr(v, 64), version: (v) => v == null || isInt(v, 0, 1e6),
-    noReplace: isBool, claimAt: (v) => isNum(v, 0, Number.MAX_SAFE_INTEGER), delta: (v) => v == null || isInt(v, 0, 1e6), guest: isBool, bakaboxLoggedIn: isBool,
-    $optional: ['token', 'version', 'noReplace', 'claimAt', 'delta', 'guest', 'bakaboxLoggedIn'] },
+    noReplace: isBool, claimAt: (v) => isNum(v, 0, Number.MAX_SAFE_INTEGER), delta: (v) => v == null || isInt(v, 0, 1e6), guest: isBool, bakaboxLoggedIn: isBool, avatarUrl: isAvatarUrl,
+    $optional: ['token', 'version', 'noReplace', 'claimAt', 'delta', 'guest', 'bakaboxLoggedIn', 'avatarUrl'] },
   ping: { c: (v) => typeof v === 'number' && Number.isFinite(v) },
   // test: only the literal true (DESIGN §34.8). Omit it for a normal room — `false` is a bad field, so a
   // string cannot sneak in as "not a test". The server still refuses it unless SP_TEST_MODE is on.

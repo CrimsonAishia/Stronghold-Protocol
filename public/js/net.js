@@ -31,6 +31,7 @@
 
 import { PROTOCOL_VERSION, ERR_TEXT } from '../../shared/constants.js';
 import { validateC2S } from '../../shared/protocol.js';
+import { isAvatarUrl } from '../../shared/avatar.js';
 import { N_ } from '../../shared/i18n.js';
 import { STATE_DELTA_VERSION, StateReceiver } from '../../shared/stateDelta.js';
 
@@ -144,6 +145,9 @@ export class Net {
     this.helloGuest = false;
     this._helloSentGuest = false;
     this.loggedIn = false;
+    this.avatarUrl = null;
+    this.helloAvatarUrl = null;
+    this._helloSentAvatarUrl = null;
     this.helloLoggedIn = false;
     this._helloSentLoggedIn = false;
     this.helloName = null;     // name we sent in the hello that got the last welcome
@@ -288,20 +292,22 @@ export class Net {
    * accepts a repeated hello on a live socket: it renames the session and resyncs room/match
    * state), otherwise as soon as it opens. No-op when that name is already accepted.
    * @param {string} name
-   * @param {{guest?: boolean, loggedIn?: boolean}} [options]
+   * @param {{guest?: boolean, loggedIn?: boolean, avatarUrl?: string | null}} [options]
    */
-  setName(name, { guest = false, loggedIn = false } = {}) {
+  setName(name, { guest = false, loggedIn = false, avatarUrl = null } = {}) {
     const n = typeof name === 'string' ? name.trim() : '';
     if (!n) return;
-    const changed = n !== this.name || guest !== this.guest || loggedIn !== this.loggedIn;
+    const avatar = loggedIn && isAvatarUrl(avatarUrl) ? avatarUrl : null;
+    const changed = n !== this.name || guest !== this.guest || loggedIn !== this.loggedIn || avatar !== this.avatarUrl;
     this.name = n;
     this.guest = guest;
     this.loggedIn = loggedIn;
+    this.avatarUrl = avatar;
     if (!this.ws || this.ws.readyState !== WS_OPEN) {
       if (!this.ws && !this._reconnectTimer && !this._manualClose) this.connect();
       return; // hello goes out on open
     }
-    if (this.status === 'online' && this.helloName === n && this.helloGuest === guest && this.helloLoggedIn === loggedIn) return;
+    if (this.status === 'online' && this.helloName === n && this.helloGuest === guest && this.helloLoggedIn === loggedIn && this.helloAvatarUrl === avatar) return;
     if (this.status === 'handshaking' && !changed && this._helloSentName === n && this._helloSentGuest === guest && this._helloSentLoggedIn === loggedIn) return;
     // The server accepts a repeated hello on a live socket (it renames the session and resyncs).
     this._sendHello();
@@ -394,6 +400,7 @@ export class Net {
     const msg = { t: 'hello', rid, name: this.name, version: PROTOCOL_VERSION, delta: STATE_DELTA_VERSION };
     if (this.guest) msg.guest = true;
     if (this.loggedIn) msg.bakaboxLoggedIn = true;
+    if (this.avatarUrl) msg.avatarUrl = this.avatarUrl;
     let token = null;
     try { token = this.getToken(); } catch { token = null; }
     if (typeof token === 'string' && token.length > 0 && token.length <= 64) {
@@ -407,6 +414,7 @@ export class Net {
     this._helloSentName = this.name;
     this._helloSentGuest = this.guest;
     this._helloSentLoggedIn = this.loggedIn;
+    this._helloSentAvatarUrl = this.avatarUrl;
     if (this.status !== 'handshaking') this._setStatus('handshaking');
     if (!this._sendRaw(msg)) return;
     this._clearTimer('_helloTimer', 'clearTimeout');
@@ -429,6 +437,7 @@ export class Net {
     this.helloName = this._helloSentName;
     this.helloGuest = this._helloSentGuest;
     this.helloLoggedIn = this._helloSentLoggedIn;
+    this.helloAvatarUrl = this._helloSentAvatarUrl;
     this.serverName = typeof msg.name === 'string' && msg.name ? msg.name : this._helloSentName;
     this.playerId = msg.playerId ?? null;
     this.attempt = 0;

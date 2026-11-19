@@ -44,6 +44,7 @@ import { prepareStateFrame, negotiateStateDelta, resetStateDelta, setStateDeltaR
 import { randomBytes } from 'node:crypto';
 import { isIP } from 'node:net';
 import { C2S, validateC2S } from '../shared/protocol.js';
+import { isAvatarUrl } from '../shared/avatar.js';
 import { ERR, ERR_TEXT, NAME_MAX_LEN, PROTOCOL_VERSION } from '../shared/constants.js';
 
 /** Tunables (all overridable through the Network / SessionRegistry constructors). */
@@ -109,6 +110,8 @@ export class Session {
     this.guestName = null;
     /** @type {boolean} host-reported login state; not a cryptographically verified account identity */
     this.bakaboxLoggedIn = false;
+    /** @type {string | null} public avatar URL */
+    this.avatarUrl = null;
     /** @type {import('ws').WebSocket | null} currently bound socket */
     this.ws = null;
     /** @type {boolean} */
@@ -756,6 +759,7 @@ export class Network {
     }
     session.name = displayName;
     session.bakaboxLoggedIn = msg.bakaboxLoggedIn === true && msg.guest !== true;
+    session.avatarUrl = session.bakaboxLoggedIn && isAvatarUrl(msg.avatarUrl) ? msg.avatarUrl : null;
     session.lastSeen = now;
     session.addr = conn.ip;
     session.limitKey = conn.key;

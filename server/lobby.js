@@ -489,6 +489,7 @@ export class Room {
       inMatch: !!this.match,
       seats: this.seats.map((s) => (s
         ? { seat: s.seat, playerId: s.playerId, name: s.name, isBot: s.isBot, ready: s.ready, connected: s.connected && !s.left,
+          ...(!s.isBot && s.avatarUrl ? { avatarUrl: s.avatarUrl } : {}),
           // a room with gameplay plugins (header "Gameplay plugins"): has this player's page loaded and checked its content?
           ...(this.needsContent && !s.isBot ? { content: s.content || 'loading' } : {}),
           // 名片干员 (room.card): only a human seat with a card carries the key
@@ -714,6 +715,8 @@ export class Lobby {
     if (!resumed && !repeat) return;
     const room = this.roomOf(session);
     if (room?.mode === 'coop' && session.bakaboxLoggedIn !== true) {
+      const seat = room.seatOf(session.playerId);
+      if (seat) seat.avatarUrl = null;
       this.removeMember(room, session.playerId);
       sendSession(session, { t: 'room.closed', reason: 'login_required' });
       return;
@@ -739,6 +742,7 @@ export class Lobby {
     let changed = !seat.connected;
     seat.connected = true;
     if (!room.match && seat.name !== session.name) { seat.name = session.name; changed = true; }
+    if ((seat.avatarUrl || null) !== session.avatarUrl) { seat.avatarUrl = session.avatarUrl; changed = true; }
     if (!room.hostId) { this.migrateHost(room); changed = true; }
     if (changed) this.broadcastState(room);
     else this.sendState(room, session);
@@ -2369,6 +2373,7 @@ export class Lobby {
     const card = session.card && chessCharIds(this.dataFor(room)).has(session.card) ? session.card : null;
     return {
       seat: idx, playerId: session.playerId, name: session.name, isBot: false, ready: false, connected: session.connected, left: false,
+      avatarUrl: session.avatarUrl || null,
       loadout: session.loadout || null,
       ops: session.ops || null,
       notOwned: session.notOwned || null,
