@@ -35,7 +35,7 @@ import { openStats } from './stats.js';
 import { identity } from '../net.js';
 import { store, useStore, shallowEqual } from '../store.js';
 import { data, useData, localAsset } from '../data.js';
-import { FullscreenButton, PwaInstallButton } from '../ui/device.js';
+import { FullscreenButton } from '../ui/device.js';
 import { LangToggle, useLang } from '../ui/lang.js';
 import { t, N_ } from '../../../shared/i18n.js';
 import { scriptOf } from '../../../shared/i18nPacks.js';
@@ -316,7 +316,6 @@ export function TitleScreen() {
 
     <footer class="title-foot">
       <${ResumeMatchButton} />
-      <${PwaInstallButton} />
       <${NoticesButton} />
       ${installed ? html`<button type="button" class="title-plugins" data-testid="title-plugins" onClick=${openPlugins}>
         <${Icon} name="info" />${t('本服务器安装了 {n} 个插件', { n: installed })}</button>` : null}
