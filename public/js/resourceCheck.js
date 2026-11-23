@@ -2,7 +2,9 @@
 // The server must retain full manifests even when deployments require users to supply their own art.
 import { collectAssetUrls } from './assetDownload.js';
 import { readServedManifests } from './assetPack.js';
-import { IMPORTED_ASSET_CACHE } from './assetCache.js';
+import { IMPORTED_ASSET_CACHE, IMPORTED_ASSET_PATH, RELEASE_ASSET_CACHE, releaseAssetCache } from './assetCache.js';
+import { APP_VERSION } from '../../shared/constants.js';
+import { cdnAssetPath } from './assetCdn.js';
 import { DOWNLOAD_VOICE_TREES } from './voiceDownloads.js';
 import { mediaUrl } from './media.js';
 
@@ -88,13 +90,18 @@ function readValidBody(response) {
  * Throws on manifest failure/cancellation instead of reporting a false success.
  */
 export async function checkResources({ fetch: doFetch = (...args) => globalThis.fetch(...args), caches: cachesApi = globalThis.caches,
-  signal, onProgress = (_progress) => {}, hasResource } = {}) {
+  signal, onProgress = (_progress) => {}, hasResource, version = APP_VERSION } = {}) {
   const abort = () => { if (signal?.aborted) throw new DOMException('Aborted', 'AbortError'); };
   const manifests = await readServedManifests((url, options) => doFetch(url, { ...options, signal }));
   abort();
   const requirements = resourceRequirements(manifests.assets, manifests.local, manifests.fx);
-  let cache = null, cacheFailed = false;
+  let cache = null, releaseCache = null, legacyReleaseCache = null, cacheFailed = false;
   try { cache = await cachesApi?.open(IMPORTED_ASSET_CACHE); } catch { cacheFailed = true; }
+  const releaseName = releaseAssetCache(version);
+  try { releaseCache = await cachesApi?.open(releaseName); } catch { cacheFailed = true; }
+  if (releaseName !== RELEASE_ASSET_CACHE) {
+    try { legacyReleaseCache = await cachesApi?.open(RELEASE_ASSET_CACHE); } catch { /* ignore */ }
+  }
   const lookup = hasResource || (async (_url, aliases) => {
     let uncertain = cacheFailed;
     for (const alias of aliases) {
@@ -102,6 +109,14 @@ export async function checkResources({ fetch: doFetch = (...args) => globalThis.
       try {
         const hit = await cache?.match(alias);
         if (hit && await validBody(hit)) return true;
+      } catch { uncertain = true; }
+      try {
+        const path = cdnAssetPath(alias) || new URL(alias, globalThis.location?.origin || 'http://localhost').pathname;
+        if (!IMPORTED_ASSET_PATH.test(path)) {
+          let hit = await releaseCache?.match(path);
+          if (!hit && legacyReleaseCache) hit = await legacyReleaseCache?.match(path);
+          if (hit && await validBody(hit)) return true;
+        }
       } catch { uncertain = true; }
       try {
         const hit = await doFetch(alias, { cache: 'only-if-cached', mode: 'same-origin', redirect: 'error', signal });

@@ -61,6 +61,8 @@ import {
 import { data } from '../data.js';
 import { askPersistStorage, importSupport, storagePersisted } from '../assetCache.js';
 import { assetImport, pruneImportedAssets } from '../assetPack.js';
+import { assetPartDownloader } from '../assetPartDownload.js';
+import { SegmentedProgressBar } from './assetPartDownload.js';
 import { cosmetics } from '../cosmetics.js';
 
 const cx = (...p) => p.flat().filter(Boolean).join(' ');
@@ -432,6 +434,13 @@ function StorageSection() {
   // 清理旧版本素材: only where an import can exist (a secure context with Cache Storage), never while one runs
   const [importing, setImporting] = useState(() => ['reading', 'importing'].includes(assetImport.get().phase));
   useEffect(() => assetImport.subscribe((s) => setImporting(['reading', 'importing'].includes(s.phase))), []);
+  const [download, setDownload] = useState(() => assetPartDownloader.get());
+  useEffect(() => assetPartDownloader.subscribe(setDownload), []);
+  const downloading = ['downloading', 'verifying', 'importing', 'checking'].includes(download.phase);
+  const reinstall = async () => {
+    const ok = await confirmDialog({ title: t('重新安装素材'), text: t('将重新下载完整素材，可能需要较长时间并消耗流量。'), okText: t('重新安装素材') });
+    if (ok) void assetPartDownloader.reinstall();
+  };
   const [pruning, setPruning] = useState(false);
   const [pruned, setPruned] = useState(null); // { kind: 'done' | 'none' | 'failed', n }
   const prune = async () => {
@@ -455,6 +464,16 @@ function StorageSection() {
       </span>
     <//>
     <p class="set-hint">${t('导入的素材包保存在这个浏览器里。手动清除网站数据会删除它们；Safari 约 7 天没打开本站也可能清除。')}</p>
+    <div class="set-storage__actions">
+      <${Button} size="sm" disabled=${downloading || importing} onClick=${() => void assetPartDownloader.start()}>${t('检查并修复素材')}<//>
+      ${downloading && download.phase !== 'checking' ? html`<${Button} size="sm" onClick=${() => assetPartDownloader.pause()}>${t('暂停')}<//>` : null}
+      ${download.phase === 'paused' || download.phase === 'error' ? html`<${Button} size="sm" disabled=${importing} onClick=${() => void assetPartDownloader.resume()}>${download.phase === 'paused' ? t('继续下载') : t('重试下载')}<//>` : null}
+    </div>
+    <details><summary>${t('高级操作')}</summary>
+      <${Button} size="sm" disabled=${downloading || importing} onClick=${() => void reinstall()}>${t('重新安装素材')}<//>
+    </details>
+    ${download.parts.length ? html`<${SegmentedProgressBar} parts=${download.parts} totalBytes=${download.totalBytes} receivedBytes=${download.receivedBytes} percent=${download.percent} />` : null}
+    <p role="status">${download.statusText}</p>
     ${state ? html`<p class=${cx('set-keys__note', state !== 'on' && state !== 'off' && 'is-warn')} role="status" aria-live="polite"
       data-testid="storage-note">${t(PERSIST_NOTES[state])}</p>` : null}
     ${pruned ? html`<p class=${cx('set-keys__note', pruned.kind === 'failed' && 'is-warn')} role="status" aria-live="polite"

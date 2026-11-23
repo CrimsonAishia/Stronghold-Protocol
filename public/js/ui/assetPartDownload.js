@@ -1,5 +1,5 @@
 import { useEffect, useState } from '../../vendor/hooks.module.js';
-import { html, Button, ProgressBar } from './components.js';
+import { html, Button, ProgressBar, Spinner } from './components.js';
 import { assetPartDownloader, formatBytes } from '../assetPartDownload.js';
 import { t } from '../../../shared/i18n.js';
 
@@ -45,26 +45,40 @@ export function AssetPartDownloadPanel({ onComplete }) {
 
   useEffect(() => {
     const unsubscribe = assetPartDownloader.subscribe(setState);
-    assetPartDownloader.check();
     return () => {
       unsubscribe();
     };
   }, []);
 
   const isDownloading = ['downloading', 'verifying', 'importing'].includes(state.phase);
+  const checkProgress = state.checkProgress;
+  const checkLabel = checkProgress?.stage === 'server' ? t('正在检查服务器素材…')
+    : checkProgress?.stage === 'manifest' ? t('正在读取素材清单…')
+    : checkProgress?.stage === 'worker' ? t('正在启用本地素材…')
+    : t('正在检查本地素材…');
 
   return html`<div class="asset-part-downloader" data-testid="asset-part-downloader">
+    ${state.phase === 'checking' ? checkProgress?.total > 0 ? html`
+      <p role="status">
+        ${checkLabel}${' '}
+        ${checkProgress.stage === 'local'
+          ? t('已检查 {done} / {total} 个分包', checkProgress)
+          : t('已完成 {done} / {total} 个文件', checkProgress)}
+      </p>
+      <${ProgressBar} value=${checkProgress.done} max=${checkProgress.total} size="sm" />
+    ` : html`<${Spinner} size="sm" label=${checkLabel} />` : null}
     ${state.phase === 'idle' ? html`
-      <p class="t-lo">${t('初次进入需下载完整素材（包含干员模型、立绘、棋盘与语音包，约 814 MB）。建议在稳定网络下进行。')}</p>
+      ${!state.completedParts && !state.hasStagedParts ? html`<p class="t-lo">${t('初次进入需下载完整素材（包含干员模型、立绘、棋盘与语音包，约 814 MB）。建议在稳定网络下进行。')}</p>` : null}
       <div class="resource-manager__actions">
         <${Button} variant="primary" size="lg" block=${true} onClick=${() => assetPartDownloader.start()}>
-          ${t('下载完整素材')}
+          ${state.completedParts || state.hasStagedParts ? t('继续下载') : t('下载完整素材')}
         <//>
       </div>
     ` : null}
 
     ${isDownloading || state.phase === 'paused' ? html`
       <p class="asset-part-downloader__status" role="status">${state.statusText}</p>
+      ${state.importProgress ? html`<p role="status">${t('正在解压导入')} ${state.importProgress.done} / ${state.importProgress.total}</p>` : null}
       <${SegmentedProgressBar}
         parts=${state.parts}
         totalBytes=${state.totalBytes}
@@ -97,10 +111,19 @@ export function AssetPartDownloadPanel({ onComplete }) {
       </div>
     ` : null}
 
+    ${state.phase === 'check_timeout' ? html`
+      <p class="t-amber" role="alert">${t('请求超时，请重试')}</p>
+      <div class="resource-manager__actions">
+        <${Button} variant="primary" size="md" onClick=${() => assetPartDownloader.check({ retry: true })}>
+          ${t('重新检查')}
+        <//>
+      </div>
+    ` : null}
+
     ${state.phase === 'error' ? html`
       <p class="t-amber" role="alert">${state.statusText}</p>
       <div class="resource-manager__actions">
-        <${Button} variant="primary" size="md" onClick=${() => assetPartDownloader.start()}>
+        <${Button} variant="primary" size="md" onClick=${() => assetPartDownloader.resume()}>
           ${t('重试下载')}
         <//>
       </div>

@@ -17,6 +17,50 @@ export const IMPORTED_ASSET_CACHE = 'sp-imported-assets-v1';
 /** Prefix of every version of this cache. Activation deletes other names that start with it. */
 export const IMPORTED_ASSET_CACHE_PREFIX = 'sp-imported-assets-';
 
+/** Verified release parts, also served by the classic worker. */
+export const RELEASE_ASSET_CACHE = 'sp-release-assets-v1';
+export const RELEASE_ASSET_CACHE_PREFIX = 'sp-release-assets-';
+
+/** Cache Storage name for verified release parts of a given version. */
+export function releaseAssetCache(version) {
+  if (!version) return RELEASE_ASSET_CACHE;
+  const v = String(version).trim();
+  const suffix = v.startsWith('v') ? v : `v${v}`;
+  return `${RELEASE_ASSET_CACHE_PREFIX}${encodeURIComponent(suffix)}`;
+}
+export const releaseAssetCacheName = releaseAssetCache;
+
+let currentActiveVersion = null;
+const boundSwTargets = new WeakSet();
+
+/** Inform ServiceWorker and document cookie of the currently active release asset version. */
+export function setActiveAssetVersion(version, nav = globalThis.navigator) {
+  if (!version) return;
+  const v = String(version).trim();
+  currentActiveVersion = v;
+  try {
+    if (typeof document !== 'undefined' && document) {
+      document.cookie = `sp_version=${encodeURIComponent(v)};path=/;SameSite=Lax`;
+    }
+  } catch { /* ignore */ }
+  try {
+    nav?.serviceWorker?.controller?.postMessage({ type: 'SET_VERSION', version: v });
+  } catch { /* ignore */ }
+
+  if (nav?.serviceWorker && !boundSwTargets.has(nav.serviceWorker)) {
+    boundSwTargets.add(nav.serviceWorker);
+    try {
+      nav.serviceWorker.addEventListener?.('controllerchange', () => {
+        if (currentActiveVersion) {
+          try {
+            nav?.serviceWorker?.controller?.postMessage({ type: 'SET_VERSION', version: currentActiveVersion });
+          } catch { /* ignore */ }
+        }
+      });
+    } catch { /* ignore */ }
+  }
+}
+
 /** Pathname of a URL this cache may answer. The hash is the same 16 hex digits as shared/assetPaths.js. */
 export const IMPORTED_ASSET_PATH = /^\/(?:assets|fonts|media)\/~[0-9a-f]{16}\//;
 
@@ -57,6 +101,96 @@ export function importSupport(nav = globalThis.navigator, secure = globalThis.is
 export function registerImportedAssetWorker(nav = globalThis.navigator, secure = globalThis.isSecureContext) {
   if (!secure || !nav?.serviceWorker?.register) return Promise.resolve(false);
   return nav.serviceWorker.register('/sw.js', { scope: '/', updateViaCache: 'none' }).then(() => true, () => false);
+}
+
+/**
+ * Ensure Service Worker is registered and ready.
+ * When the environment supports Service Worker, registration is verified; failures return `{ ok: false, reason: '...' }`.
+ * @returns {Promise<{ ok: boolean, reason?: string }>}
+ */
+export async function ensureImportedAssetWorker(nav = globalThis.navigator, secure = globalThis.isSecureContext, { timeoutMs = 2000 } = {}) {
+  if (!secure) return { ok: false, reason: 'insecure' };
+  if (!nav?.serviceWorker?.register) return { ok: false, reason: 'unsupported' };
+  let registrationTimer;
+  try {
+    const reg = await Promise.race([
+      nav.serviceWorker.register('/sw.js', { scope: '/', updateViaCache: 'none' }),
+      new Promise((resolve) => { registrationTimer = setTimeout(() => resolve(null), timeoutMs); }),
+    ]);
+    if (!reg) return { ok: false, reason: 'registration_failed' };
+
+    const syncVersion = () => {
+      if (currentActiveVersion && nav?.serviceWorker?.controller) {
+        try {
+          nav.serviceWorker.controller.postMessage({ type: 'SET_VERSION', version: currentActiveVersion });
+        } catch { /* ignore */ }
+      }
+    };
+
+    if (nav.serviceWorker.controller) {
+      syncVersion();
+      return { ok: true };
+    }
+
+    if (!('controller' in nav.serviceWorker)) {
+      return { ok: true };
+    }
+
+    const result = await new Promise((resolve) => {
+      let settled = false;
+      let timer = null;
+
+      const cleanup = () => {
+        if (timer) clearTimeout(timer);
+        if (typeof nav.serviceWorker.removeEventListener === 'function') {
+          nav.serviceWorker.removeEventListener('controllerchange', onControllerChange);
+        }
+      };
+
+      const onControllerChange = () => {
+        if (!settled && nav.serviceWorker.controller) {
+          settled = true;
+          cleanup();
+          resolve({ ok: true });
+        }
+      };
+
+      if (typeof nav.serviceWorker.addEventListener === 'function') {
+        nav.serviceWorker.addEventListener('controllerchange', onControllerChange);
+      }
+
+      if (nav.serviceWorker.ready && typeof nav.serviceWorker.ready.then === 'function') {
+        nav.serviceWorker.ready.then(() => {
+          if (!settled && nav.serviceWorker.controller) {
+            settled = true;
+            cleanup();
+            resolve({ ok: true });
+          }
+        }).catch(() => {});
+      }
+
+      timer = setTimeout(() => {
+        if (!settled) {
+          settled = true;
+          cleanup();
+          if (nav.serviceWorker.controller) {
+            resolve({ ok: true });
+          } else {
+            resolve({ ok: false, reason: 'uncontrolled' });
+          }
+        }
+      }, timeoutMs);
+    });
+
+    if (result.ok) {
+      syncVersion();
+    }
+    return result;
+  } catch (err) {
+    return { ok: false, reason: err?.message || 'registration_failed' };
+  } finally {
+    clearTimeout(registrationTimer);
+  }
 }
 
 /** Content-Type stored with an imported response, chosen from the URL the game will request. */
@@ -251,13 +385,16 @@ export async function clearImportedAssets(cachesApi = globalThis.caches) {
   try {
     if (cachesApi.keys) {
       const names = await cachesApi.keys();
-      const ours = names.filter((name) => String(name).startsWith(IMPORTED_ASSET_CACHE_PREFIX));
+      const ours = names.filter((name) => String(name).startsWith(IMPORTED_ASSET_CACHE_PREFIX) ||
+        String(name).startsWith(RELEASE_ASSET_CACHE_PREFIX));
       if (ours.length) {
         await Promise.all(ours.map((name) => cachesApi.delete(name)));
         return true;
       }
     }
-    return await cachesApi.delete(IMPORTED_ASSET_CACHE);
+    const removed = await cachesApi.delete(IMPORTED_ASSET_CACHE);
+    const releaseRemoved = await cachesApi.delete(RELEASE_ASSET_CACHE);
+    return removed || releaseRemoved;
   } catch {
     return false;
   }

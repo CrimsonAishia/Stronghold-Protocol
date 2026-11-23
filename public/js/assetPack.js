@@ -16,9 +16,10 @@
 // read; multi-disk archives are not. Caps: 500_000 entries, 64 MB central directory, 256 MB per entry.
 
 import { splitHashedPath } from '../../shared/assetPaths.js';
+import { APP_VERSION } from '../../shared/constants.js';
 import { mediaUrl } from './media.js';
 import { cdnAssetPath } from './assetCdn.js';
-import { IMPORTED_ASSET_CACHE, addImportedPaths, putImportedAsset, pruneImportedPaths } from './assetCache.js';
+import { IMPORTED_ASSET_CACHE, RELEASE_ASSET_CACHE_PREFIX, releaseAssetCache, addImportedPaths, putImportedAsset, pruneImportedPaths } from './assetCache.js';
 
 export const MAX_ZIP_ENTRIES = 500_000;
 export const MAX_ENTRY_BYTES = 256 * 1024 * 1024;
@@ -543,14 +544,73 @@ export function importedKeepSet(assets, local, fx) {
   return keep;
 }
 
+function parseVersionParts(name) {
+  const str = String(name ?? '').trim();
+  const clean = str.replace(/^sp-release-assets-/, '').replace(/^v/, '');
+  return clean.split(/[-._]/).map((part) => {
+    const num = parseInt(part, 10);
+    return Number.isNaN(num) ? part : num;
+  });
+}
+
+function compareVersionsDesc(a, b) {
+  const pa = parseVersionParts(a);
+  const pb = parseVersionParts(b);
+  const len = Math.max(pa.length, pb.length);
+  for (let i = 0; i < len; i++) {
+    const va = pa[i] ?? 0;
+    const vb = pb[i] ?? 0;
+    if (typeof va === 'number' && typeof vb === 'number') {
+      if (va !== vb) return vb - va;
+    } else {
+      const sa = String(va);
+      const sb = String(vb);
+      if (sa !== sb) return sb.localeCompare(sa);
+    }
+  }
+  return String(b).localeCompare(String(a));
+}
+
 /**
  * 设置 → 素材存储 → 清理旧版本素材 (0.3.1): delete the imported copies the server's current manifests no longer name. A
  * manifest that cannot be read deletes nothing (throws `{ code: 'manifest' }`).
  * @returns {Promise<{ removed: number, removedFiles: number, kept: number }>}
  */
-export async function pruneImportedAssets({ fetch: doFetch = (...args) => globalThis.fetch(...args), caches: cachesApi = globalThis.caches } = {}) {
+export async function pruneImportedAssets({ fetch: doFetch = (...args) => globalThis.fetch(...args), caches: cachesApi = globalThis.caches, version } = {}) {
   const { assets, local, fx } = await readServedManifests(doFetch);
-  return pruneImportedPaths(importedKeepSet(assets, local, fx), cachesApi);
+  const result = await pruneImportedPaths(importedKeepSet(assets, local, fx), cachesApi);
+  if (cachesApi?.keys && cachesApi?.delete) {
+    try {
+      const names = await cachesApi.keys();
+      let currentServerVersion = APP_VERSION;
+      if (typeof assets?.appVersion === 'string' && assets.appVersion.trim()) {
+        currentServerVersion = assets.appVersion.trim();
+      } else if (typeof assets?.version === 'string' && assets.version.includes('.')) {
+        currentServerVersion = assets.version.trim();
+      } else if (typeof version === 'string' && version.trim()) {
+        currentServerVersion = version.trim();
+      }
+      const currentRelease = releaseAssetCache(currentServerVersion);
+      const staleReleaseCaches = names.filter((name) => {
+        if (!name.startsWith(RELEASE_ASSET_CACHE_PREFIX)) return false;
+        if (name === currentRelease) return false;
+        const cacheVer = name.replace(RELEASE_ASSET_CACHE_PREFIX, '');
+        return compareVersionsDesc(cacheVer, currentServerVersion) > 0;
+      });
+      for (const name of staleReleaseCaches) {
+        let count = 0;
+        try {
+          const oldCache = await cachesApi.open(name);
+          const keys = await oldCache.keys();
+          count = keys.length;
+        } catch { /* ignore */ }
+        await cachesApi.delete(name);
+        result.removed += count;
+        result.removedFiles += count;
+      }
+    } catch { /* ignore */ }
+  }
+  return result;
 }
 
 /** The cache keys of one served URL: itself, plus the `/media/~hash/…` alias when playback would request it. */
@@ -562,6 +622,26 @@ export function cacheUrlsFor(url) {
   const media = mediaUrl(canonical || url);
   if (typeof media === 'string' && media) out.add(media);
   return [...out];
+}
+
+// Release parts are authenticated by the downloader before their entries reach this cache.
+export async function importReleaseAssetPart(data, cachesApi = globalThis.caches, version) {
+  const zip = await openZip(data);
+  if (!zip.ok) throw new Error('素材分包不是有效的 zip');
+  const cache = await cachesApi.open(releaseAssetCache(version));
+  const paths = new Set();
+  for (const entry of zip.entries) {
+    const path = normalizePackPath(entry.name);
+    if (!path || !/^public\/(?:assets|fonts)\//.test(path)) continue;
+    const result = await zip.read(entry);
+    if (!result.ok || !result.bytes?.byteLength) throw new Error('素材分包包含无法读取的文件');
+    const url = '/' + path.slice('public/'.length);
+    const urls = cacheUrlsFor(url);
+    await putImportedAsset(cache, urls, result.bytes);
+    for (const key of urls) paths.add(new URL(key, 'http://localhost').pathname);
+  }
+  if (!paths.size) throw new Error('素材分包没有可用文件');
+  return [...paths];
 }
 
 const idleState = () => ({
@@ -598,10 +678,11 @@ export function createAssetImport({
   let cancelFlag = false;
   let running = null;
   let lastNotice = 0;
+  let lastRejectedEntries = [];
   const listeners = new Set();
 
   const snapshot = () => ({
-    phase, total, done, accepted, rejected, skipped, failed, unsupported, error,
+    phase, total, done, accepted, rejected, skipped, failed, unsupported, error, rejectedEntries: lastRejectedEntries,
   });
 
   const publish = (force = false) => {
@@ -626,9 +707,16 @@ export function createAssetImport({
 
   const readManifest = (url, optional) => readServedManifest(doFetch, url, optional);
 
-  async function loadZip(data) {
+  async function loadZip(data, releaseVersion) {
     const zip = await openZip(data);
     if (!zip.ok) throw Object.assign(new Error('bad-zip'), { code: 'bad-zip' });
+    const releaseCache = releaseVersion && cachesApi?.open
+      ? await cachesApi.open(releaseAssetCache(releaseVersion)) : null;
+    const pathCounts = new Map();
+    for (const entry of zip.entries) {
+      const path = normalizePackPath(entry.name);
+      if (path) pathCounts.set(path, (pathCounts.get(path) || 0) + 1);
+    }
     const list = [];
     for (const entry of zip.entries) {
       const path = normalizePackPath(entry.name);
@@ -636,7 +724,13 @@ export function createAssetImport({
       list.push({
         path,
         read: async () => {
-          try { return await zip.read(entry); } catch { return { ok: false, code: 'bad-entry' }; }
+          try {
+            if (releaseCache && pathCounts.get(path) === 1 && /^public\/(?:assets|fonts)\//.test(path)) {
+              const response = await releaseCache.match('/' + path.slice('public/'.length));
+              if (response) return { ok: true, bytes: new Uint8Array(await response.arrayBuffer()) };
+            }
+            return await zip.read(entry);
+          } catch { return { ok: false, code: 'bad-entry' }; }
         },
       });
     }
@@ -666,10 +760,14 @@ export function createAssetImport({
     return list;
   }
 
+  let lastStoredPaths = [];
+
   async function run(source) {
+    lastStoredPaths = [];
     let cache = null;
     /** Pathnames this run stored: added to the import's index as it ends (assetCache.js addImportedPaths). */
     const storedPaths = new Set();
+    const rejectedEntries = [];
     phase = 'reading';
     error = null;
     total = 0;
@@ -691,7 +789,7 @@ export function createAssetImport({
       }
       const plan = planFromManifests(assets, mergeLocalManifests(local, fx));
       let list;
-      if (source?.type === 'zip') list = await loadZip(source.data);
+      if (source?.type === 'zip') list = await loadZip(source.data, source.releaseVersion);
       else if (source?.type === 'files') list = await loadFiles(source.files);
       else throw Object.assign(new Error('source'), { code: 'unknown' });
       if (list.length > MAX_ZIP_ENTRIES) throw Object.assign(new Error('source'), { code: 'unknown' });
@@ -797,7 +895,10 @@ export function createAssetImport({
           }
         } else {
           for (const member of group.members) {
-            if (spineOnly.has(member.rel)) settle(member.rel, 'rejected');
+            if (spineOnly.has(member.rel)) {
+              rejectedEntries.push({ rel: member.rel, url: member.url });
+              settle(member.rel, 'rejected');
+            }
           }
         }
       }
@@ -819,7 +920,10 @@ export function createAssetImport({
         if (urls.length) {
           await store(urls, got.bytes);
           settle(rel, 'accepted');
-        } else settle(rel, 'rejected');
+        } else {
+          rejectedEntries.push({ rel, url: spec.url });
+          settle(rel, 'rejected');
+        }
         reads.delete(rel);
       }
 
@@ -842,12 +946,16 @@ export function createAssetImport({
       if (cache && storedPaths.size) {
         try { await addImportedPaths(cache, storedPaths); } catch { /* the entries stay; Cache.keys() may still list them */ }
       }
+      lastStoredPaths = [...storedPaths];
+      lastRejectedEntries = [...rejectedEntries];
       publish(true);
     }
   }
 
   return {
     get: () => state,
+    getStoredPaths: () => lastStoredPaths,
+    getRejected: () => lastRejectedEntries,
     subscribe(listener) {
       listeners.add(listener);
       return () => listeners.delete(listener);
